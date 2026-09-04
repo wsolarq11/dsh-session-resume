@@ -1,14 +1,14 @@
 /** Shared UI building blocks for the resume dock (styles, transient state, order labels, action bar). */
 
 import * as React from 'react'
-import { MAX_REFERENCES } from '../shared/constants.js'
+import { MAX_REFERENCES } from '../../pure/text/constants.js'
 import { buildResumePromptWithInstruction } from './resume-client.js'
 import {
   countDistinctSessionRefs,
   findSourceRefs,
   type SourcePathRef,
   type SourceSessionRef,
-} from '../shared/source-ref.js'
+} from '../../pure/refs/source-ref.js'
 import { copyText } from './resume-executor.js'
 import { runResumeOrder } from './order.js'
 import { runResumeBatchOrder } from './batch.js'

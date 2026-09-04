@@ -9,7 +9,7 @@
 
 import { runResumeOnce, runResumeInFlight, buildSingleResumeText, type ResumeStage } from './resume-executor.js'
 import type { ClientContext } from './types.js'
-import type { ResumePlanOk } from '../shared/plan.js'
+import type { ResumePlanOk } from '../../pure/plan/plan.js'
 
 export function runResumeOrder(
   ctx: ClientContext,

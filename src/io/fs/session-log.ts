@@ -2,19 +2,19 @@
 
 import { readFile } from 'node:fs/promises'
 import { materializeSessionLogExport } from './log-materialize.js'
-import { formatMention } from '../shared/session-uri.js'
-import { findSessionIdFromMention, findSessionSourceRefs } from '../shared/source-ref.js'
+import { formatMention } from '../../pure/refs/session-uri.js'
+import { findSessionIdFromMention, findSessionSourceRefs } from '../../pure/refs/source-ref.js'
 import { readResumeConfig } from './config.js'
 import { listSessionSnapshots } from './snapshot-store.js'
-import { hasLegacySurfaceEvents } from '../shared/legacy-surface.js'
-import { flushLiveSession, readCacheRootSafe, readSessionPersistence, readSessionQuery } from './service.js'
-import { JSONL_DIRECTORY_KIND, type ResumeSourceInfo } from '../shared/plan.js'
+import { hasLegacySurfaceEvents } from '../../pure/text/legacy-surface.js'
+import { flushLiveSession, readCacheRootSafe, readSessionPersistence, readSessionQuery } from '../../orchestration/host/service.js'
+import { JSONL_DIRECTORY_KIND, type ResumeSourceInfo } from '../../pure/plan/plan.js'
 import type {
   HostContext,
   SessionPersistenceLike,
   SessionQueryLike,
   SessionRecordLike,
-} from './types.js'
+} from '../../contract/host-types.js'
 
 export interface SessionInfo {
   sessionId: string
@@ -128,7 +128,7 @@ export async function readSessionTitle(
   }
 }
 
-export type { SessionLogLayout } from '../shared/plan.js'
+export type { SessionLogLayout } from '../../pure/plan/plan.js'
 
 export async function resolveSessionLogPath(
   ctx: HostContext,

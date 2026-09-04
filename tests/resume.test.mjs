@@ -3,9 +3,9 @@ import assert from 'node:assert/strict'
 import {
   buildResumePrompt,
   RESUME_INSTRUCTION,
-} from '../lib/shared/resume-text.js'
-import { connectResumeSession, promptResumeSession } from '../lib/client/resume-client.js'
-import { buildSingleResumeText } from '../lib/client/resume-executor.js'
+} from '../lib/pure/text/resume-text.js'
+import { connectResumeSession, promptResumeSession } from '../lib/orchestration/client/resume-client.js'
+import { buildSingleResumeText } from '../lib/orchestration/client/resume-executor.js'
 
 class FakeResumeSessions {
   constructor({ promptResult = { ok: true } } = {}) {

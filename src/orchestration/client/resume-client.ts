@@ -7,7 +7,7 @@
  * builders it depends on live in `../shared/resume-text.js`.
  */
 
-import { RESUME_INSTRUCTION, buildResumePrompt, type ResumePromptOptions } from '../shared/resume-text.js'
+import { RESUME_INSTRUCTION, buildResumePrompt, type ResumePromptOptions } from '../../pure/text/resume-text.js'
 
 export { RESUME_INSTRUCTION }
 

@@ -6,7 +6,7 @@ import {
   findFirstSourceRef,
   findSessionIdFromMention,
   findSessionSourceRefs,
-} from '../lib/shared/source-ref.js'
+} from '../lib/pure/refs/source-ref.js'
 
 const windows = String.raw`D:\AI\projects\demo\sess_1\session.jsonl.zstd`
 const url = '/api/session.export?sessionId=sess_1&includeDescendants=true'

@@ -11,7 +11,7 @@ const CLIENT_EXTERNALS = [
 ]
 
 const clientBundle: UserConfig = {
-  entry: { client: 'src/client/index.ts' },
+  entry: { client: 'src/orchestration/client/index.ts' },
   outDir: 'lib',
   format: 'cjs',
   platform: 'browser',

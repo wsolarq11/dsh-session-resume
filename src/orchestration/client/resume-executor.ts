@@ -10,8 +10,8 @@
  */
 
 import { connectResumeSession, promptResumeSession, resolveResumeInstruction, buildResumePromptWithInstruction } from './resume-client.js'
-import { buildResumeBatchText } from '../shared/batch-text.js'
-import type { ResumePlanOk } from '../shared/plan.js'
+import { buildResumeBatchText } from '../../pure/text/batch-text.js'
+import type { ResumePlanOk } from '../../pure/plan/plan.js'
 import type { ResumeSessionsClient } from './resume-client.js'
 import type { ClientContext } from './types.js'
 import type { TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'

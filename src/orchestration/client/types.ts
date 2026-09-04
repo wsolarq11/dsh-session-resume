@@ -4,10 +4,10 @@
 import type { TypertClientRemote } from '@deepseek-ai/dsh-typert-protocol'
 import '@dsh-external/dsh-session-resume/remote'
 import type { ResumeSessionsClient, ResumeWorkspaceClient } from './resume-client.js'
-import type { LogPathHit } from '../shared/session-path.js'
-import type { LogUrlHit } from '../shared/session-url.js'
-import type { SourceRef } from '../shared/source-ref.js'
-import type { ResumePlan } from '../shared/plan.js'
+import type { LogPathHit } from '../../pure/refs/session-path.js'
+import type { LogUrlHit } from '../../pure/refs/session-url.js'
+import type { SourceRef } from '../../pure/refs/source-ref.js'
+import type { ResumePlan } from '../../pure/plan/plan.js'
 
 /** The two slot-registry methods the plugin uses. */
 export interface SlotsLike {
@@ -37,7 +37,7 @@ export interface DockProps {
   inputActions?: { setDraft?(text: string): void; submit?(): void }
 }
 
-export type { ResumePlan } from '../shared/plan.js'
+export type { ResumePlan } from '../../pure/plan/plan.js'
 
 export interface ResolvedLogUrl {
   sessionId: string

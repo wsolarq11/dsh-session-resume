@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   hasLegacySurfaceEvents,
   isUnidentifiedMessageEvent,
-} from '../lib/shared/legacy-surface.js'
+} from '../lib/pure/text/legacy-surface.js'
 
 const LEGACY_USER = {
   type: 'user/message',

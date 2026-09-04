@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { ResumeOrderBook } from '../lib/host/resume-order.js'
+import { ResumeOrderBook } from '../lib/pure/order/resume-order.js'
 
 const okPlan = (attemptId) => ({
   ok: true,

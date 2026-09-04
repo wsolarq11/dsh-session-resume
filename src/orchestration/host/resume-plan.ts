@@ -2,13 +2,13 @@
 
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
-import { formatMention } from '../shared/session-uri.js'
-import { MAX_SOURCE_SESSIONS } from '../shared/constants.js'
-import { resolveSourceLog, type SessionLogPathInfo } from './session-log.js'
-import { WORKSPACE_MANIFEST_FILE, WORKSPACE_STATE_DIR } from './workspace-state.js'
-import type { HostContext } from './types.js'
-import { resolveResumeWorkspace } from './workspace.js'
-import type { ResumePlan, ResumeSourceInfo, ResumeTarget } from '../shared/plan.js'
+import { formatMention } from '../../pure/refs/session-uri.js'
+import { MAX_SOURCE_SESSIONS } from '../../pure/text/constants.js'
+import { resolveSourceLog, type SessionLogPathInfo } from '../../io/fs/session-log.js'
+import { WORKSPACE_MANIFEST_FILE, WORKSPACE_STATE_DIR } from '../../io/fs/workspace-state.js'
+import type { HostContext } from '../../contract/host-types.js'
+import { resolveResumeWorkspace } from '../../io/fs/workspace.js'
+import type { ResumePlan, ResumeSourceInfo, ResumeTarget } from '../../pure/plan/plan.js'
 
 async function hasWorkspaceState(snapshotPath: string): Promise<boolean> {
   try {

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { batchOrderKey } from '../lib/client/batch.js'
+import { batchOrderKey } from '../lib/orchestration/client/batch.js'
 
 test('batchOrderKey cannot collide for session ids containing the old separator', () => {
   assert.notEqual(batchOrderKey(['a|b', 'c']), batchOrderKey(['a', 'b|c']))

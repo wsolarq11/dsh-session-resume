@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { MAX_REFERENCES, rewriteText } from '../lib/index.js'
-import { resolveFromText } from '../lib/host/session-log.js'
+import { resolveFromText } from '../lib/io/fs/session-log.js'
 
 function sessionQuery(records) {
   return {

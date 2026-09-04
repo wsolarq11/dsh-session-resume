@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   findLogPathMatches,
   isSessionLogPath,
-} from '../lib/shared/session-path.js'
+} from '../lib/pure/refs/session-path.js'
 
 const pathMatch = (text) => findLogPathMatches(text)[0] ?? null
 

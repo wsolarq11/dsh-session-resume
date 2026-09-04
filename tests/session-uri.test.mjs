@@ -4,7 +4,7 @@ import {
   decodeSessionPayload,
   encodeSessionUri,
   formatMention,
-} from '../lib/shared/session-uri.js'
+} from '../lib/pure/refs/session-uri.js'
 
 function officialUri(sessionId) {
   return 'dsh-session:' + Buffer.from(JSON.stringify(sessionId), 'utf8').toString('base64url')

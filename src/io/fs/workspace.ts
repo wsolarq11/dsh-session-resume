@@ -1,7 +1,7 @@
 /** Host-side workspace resolution: original session membership wins, then canonical path registration. */
 
-import { readService } from './service.js'
-import type { HostContext, WorkspaceLike, WorkspaceRegistryLike } from './types.js'
+import { readService } from '../../orchestration/host/service.js'
+import type { HostContext, WorkspaceLike, WorkspaceRegistryLike } from '../../contract/host-types.js'
 
 export type ResumeWorkspaceResolution =
   | { ok: true; workspaceId: string; cwd: string; created: boolean }

@@ -4,8 +4,8 @@ import { randomUUID } from 'node:crypto'
 import { readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ResumeOrderBook } from '../lib/host/resume-order.js'
-import { FileResumeOrderWal, resolveOrderWalPath } from '../lib/host/order-wal.js'
+import { ResumeOrderBook } from '../lib/pure/order/resume-order.js'
+import { FileResumeOrderWal, resolveOrderWalPath } from '../lib/pure/order/order-wal.js'
 
 const okPlan = (attemptId) => ({
   ok: true,

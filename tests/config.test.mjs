@@ -9,9 +9,9 @@ import {
   readResumeConfig,
   writeResumeConfig,
   RESUME_INSTRUCTION,
-} from '../lib/host/config.js'
-import { buildResumePrompt } from '../lib/shared/resume-text.js'
-import { resolveEffectiveInstruction } from '../lib/client/resume-client.js'
+} from '../lib/io/fs/config.js'
+import { buildResumePrompt } from '../lib/pure/text/resume-text.js'
+import { resolveEffectiveInstruction } from '../lib/orchestration/client/resume-client.js'
 
 function cacheRoot() {
   return join(tmpdir(), 'dsh-session-resume-config-tests', randomUUID())

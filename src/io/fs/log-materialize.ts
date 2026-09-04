@@ -8,9 +8,9 @@ import {
   readAttachments,
   readSessionPersistence,
   readSessionQuery,
-} from './service.js'
+} from '../../orchestration/host/service.js'
 import { DEFAULT_SNAPSHOT_RETENTION } from './config.js'
-import type { SessionLogLayout } from '../shared/plan.js'
+import type { SessionLogLayout } from '../../pure/plan/plan.js'
 import {
   ensureCacheRoot,
   nextSnapshotSequence,
@@ -18,7 +18,7 @@ import {
   safePathSegment,
   snapshotDirectoryPath,
 } from './snapshot-store.js'
-import { readCacheRootSafe } from './service.js'
+import { readCacheRootSafe } from '../../orchestration/host/service.js'
 import {
   WORKSPACE_GIT_FILE,
   WORKSPACE_MANIFEST_FILE,
@@ -32,7 +32,7 @@ import type {
   ImageAttachmentRefLike,
   SessionLineageNodeLike,
   SessionRawArtifactLike,
-} from './types.js'
+} from '../../contract/host-types.js'
 
 /** Known media types -> file extension; unknown types are skipped fail-closed. */
 const MEDIA_TYPE_EXTENSIONS: Record<string, string | undefined> = {

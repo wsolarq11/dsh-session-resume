@@ -11,10 +11,10 @@
  *    pasted archive URL automatically becomes a real cross-session snapshot.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { MAX_REFERENCES, RESUME_INSTRUCTION } from './shared/constants.js'
-import { findSessionSourceRefs } from './shared/source-ref.js'
-import { resolveSession, type SessionInfo } from './host/session-log.js'
-import type { HostContext } from './host/types.js'
+import { MAX_REFERENCES, RESUME_INSTRUCTION } from './pure/text/constants.js'
+import { findSessionSourceRefs } from './pure/refs/source-ref.js'
+import { resolveSession, type SessionInfo } from './io/fs/session-log.js'
+import type { HostContext } from './contract/host-types.js'
 import { TYPERT } from '@dsh-external/dsh-session-resume/typert'
 
 /** Typed projection of the generated host typert contribution (typed .d.ts is `unknown`). */
@@ -25,13 +25,13 @@ const HOST_TYPERT_CONTRIBUTION = TYPERT as {
   invocations: Array<{ namespace: string; method: string }>
 }
 
-import { SessionResumeService } from './host/session-resume-service.js'
-export { SessionResumeService, SESSION_RESUME_SERVICE_KEY } from './host/session-resume-service.js'
-export type { RemoteResolveResult } from './host/session-resume-service.js'
+import { SessionResumeService } from './orchestration/host/session-resume-service.js'
+export { SessionResumeService, SESSION_RESUME_SERVICE_KEY } from './orchestration/host/session-resume-service.js'
+export type { RemoteResolveResult } from './orchestration/host/session-resume-service.js'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
-    sessionResume: import('./host/session-resume-service.js').SessionResumeService
+    sessionResume: import('./orchestration/host/session-resume-service.js').SessionResumeService
   }
   interface Events {
     'agent/pre-step'(event: unknown, next: () => Promise<unknown>): Promise<unknown>

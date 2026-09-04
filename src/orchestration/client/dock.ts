@@ -10,8 +10,8 @@
  */
 
 import * as React from 'react'
-import { MAX_REFERENCES } from '../shared/constants.js'
-import { countDistinctSourceRefs, findFirstSourceRef } from '../shared/source-ref.js'
+import { MAX_REFERENCES } from '../../pure/text/constants.js'
+import { countDistinctSourceRefs, findFirstSourceRef } from '../../pure/refs/source-ref.js'
 import { buildResumePromptWithInstruction } from './resume-client.js'
 import { copyText, remoteFacade } from './resume-executor.js'
 import type { ResumeOrderUiState } from './resume-executor.js'

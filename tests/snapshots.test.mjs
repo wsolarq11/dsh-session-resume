@@ -4,10 +4,10 @@ import { randomUUID } from 'node:crypto'
 import { readdir, readFile, rm, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
-import { listSessionSnapshots } from '../lib/host/snapshot-store.js'
-import { materializeSessionLogExport } from '../lib/host/log-materialize.js'
-import { resolveResumePlan } from '../lib/host/resume-plan.js'
-import { resolveSourceLog } from '../lib/host/session-log.js'
+import { listSessionSnapshots } from '../lib/io/fs/snapshot-store.js'
+import { materializeSessionLogExport } from '../lib/io/fs/log-materialize.js'
+import { resolveResumePlan } from '../lib/orchestration/host/resume-plan.js'
+import { resolveSourceLog } from '../lib/io/fs/session-log.js'
 
 function attachmentsFor() {
   return {

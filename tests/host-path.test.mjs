@@ -4,8 +4,8 @@ import { randomUUID } from 'node:crypto'
 import { readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { resolveSessionLogPath } from '../lib/host/session-log.js'
-import { safePathSegment } from '../lib/host/snapshot-store.js'
+import { resolveSessionLogPath } from '../lib/io/fs/session-log.js'
+import { safePathSegment } from '../lib/io/fs/snapshot-store.js'
 
 function queryFor(records, trace) {
   return {

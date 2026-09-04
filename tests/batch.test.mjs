@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   buildResumeBatchText,
-} from '../lib/shared/batch-text.js'
-import { resolveResumeBatchPlan } from '../lib/host/resume-plan.js'
+} from '../lib/pure/text/batch-text.js'
+import { resolveResumeBatchPlan } from '../lib/orchestration/host/resume-plan.js'
 
 function ctxFor({ records, workspaceRegistry, cacheRoot }) {
   const query = {

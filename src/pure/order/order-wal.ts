@@ -13,8 +13,8 @@
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
-import { resolveCacheRoot } from './cache-root.js'
-import { isResumePlan } from '../shared/plan.js'
+import { resolveCacheRoot } from '../../io/fs/cache-root.js'
+import { isResumePlan } from '../plan/plan.js'
 import type { ResumeOrderState } from './resume-order.js'
 
 export const ORDER_WAL_FILENAME = 'orders.jsonl'

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   findLogUrlMatches,
   parseLogUrl,
-} from '../lib/shared/session-url.js'
+} from '../lib/pure/refs/session-url.js'
 
 const urlMatch = (text) => findLogUrlMatches(text)[0] ?? null
 

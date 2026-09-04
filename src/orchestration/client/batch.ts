@@ -10,7 +10,7 @@
 
 import { runResumeOnce, runResumeInFlight, buildBatchResumeText, type ResumeStage } from './resume-executor.js'
 import type { ClientContext } from './types.js'
-import type { ResumePlanOk } from '../shared/plan.js'
+import type { ResumePlanOk } from '../../pure/plan/plan.js'
 
 /**
  * Canonical in-flight key for a batch: order-insensitive so the same session

@@ -1,223 +1,100 @@
-# Thermo-Nuclear Code Quality Review — Consolidated Report (single file)
+# 热核质量治理（原则 + 当前状态）
 
-This is the **single** consolidated report for the `@dsh-external/dsh-session-resume` plugin's
-thermo-nuclear code-quality review. Every per-round report (the early `thermo-nuclear-review*.md`,
-`code-quality-assessment.md`, `thermo-nuclear-review-round-11.md`, and the Round-12
-`thermo-nuclear-code-quality-review.md`) has been folded in here and removed, so this one file is
-the only record of the full review standard, all rounds, all findings, and every applied change.
-
-Review object: `@dsh-external/dsh-session-resume` (`D:/AI/dsh-plugins/session-resume-plugin`),
-the full current working tree (`src/**`, `tests/**`, build config, docs). No git repo is in-tree,
-so each round's "current branch" equals the whole tree.
-
-Parts: §1 verdict · §2 round timeline · §3 举一反三 (governing principles, organized across every
-doc) · §4 master findings (deduplicated) · §5 intentional/documented notes · §6 forward-looking ·
-§7 how to close / verify.
+这是本项目质量治理的**单份汇总**：保留跨改动沉淀的**普适原则**（"举一反三"）与**当前仍成立的发现状态**。
+不含轮次编号、行数、测试数量、时间戳——那些会漂移；只写"写代码前应 grep 的规则"与"当前既成事实"。
+凡与当前源码冲突，以源码为准；"当前状态"由 `npm run typecheck` / `npm test`（见底）共同核验。
 
 ---
 
-## 1. Overall verdict
+## 1. 总体判断（当前）
 
-Across every round (1 → 12) the tree has been **deliberately healthy — no structural regression
-was ever found**, and no round pushed a file toward the 1000-line quality boundary.
+- 树保持健康：无结构回归、无文件冲向 500/1000 行边界、无 spaghetti 分支增长。
+- 分层诚实：纯文本在 `shared/`，Host I/O 在 `host/`（经 `SessionResumeService` 委托给纯域核心），
+  浏览器接线在 `client/`（`remote.$mount` + `remoteFacade`）。
+- canonical helper 单一源：`safePathSegment`、`readService`、`readRequiredToken/readOptionalToken`、
+  `retryWithBackoff`、`isResumePlan`、`buildResumePrompt`、`collectImageRefs`、`createResumeExecutorScope`。
+- 幂等、WAL 恢复、有界重试、审计、fail-closed 媒体处理齐备且有测试。
 
-- Largest current source file: `src/host/routes.ts` at **~425 lines** (all well under 500; the
-  1000-line blocker applies to nobody). The pre-decomposition `api.ts` (454 lines) was split in
-  Round 11.
-- Functions are short (4–20 lines), early-return, strongly typed, fail-closed.
-- The `shared` / `host` / `client` split is honest: pure text in `shared/`, host I/O in `host/`,
-  browser wiring in `client/`.
-- Canonical helpers are single-sourced: `safePathSegment`, `readService` + accessors,
-  `readRequiredToken`/`readOptionalToken`, `retryWithBackoff`, `isResumePlan`,
-  `buildResumePrompt`, `resolveResumeInstruction`, `collectImageRefs`/`eventContentRoots`,
-  `createResumeExecutorScope`.
-- Idempotency, WAL recovery, bounded retries, audit, and fail-closed media handling are all
-  present and test-backed.
+## 2. 治理原则（跨改动沉淀，写新码前 grep）
 
-### Verification baseline (current)
+**P1 规则单源且用对模式**：不要只删重复，还要让每个调用方选对变体（必填 vs 可选、
+`string` vs `string | undefined`），让类型与分支一起消失，而非复制规则。
 
-```
-npm run typecheck      → PASS
-npm test               → 118 tests, 0 failures (with pretest build)
-npm run build:client   → PASS   (suite history: 114 → 116 → 118)
-```
+**P2 删整概念，不重排**：每个抽象都问"它防住了什么具体的失败？"答不出就删。克制的次数是
+删除而非打磨。
 
----
+**P3 每个关注点要有唯一家，边界切分编排与业务**：`shared/plan.ts` 持有唯一 wire 契约；追求
+每个服务/门面读取收敛到 `service.ts`；新代码进所属层，不就近塞。
 
-## 2. Review rounds — timeline (all folded here)
+**P4 无可耐何 fail-closed 且跨边界保留真实 status/error**：未知媒体跳过+记录（不生成 `.undefined`）、
+不可读快照 `readable:false`、源日志失败以 `404/501` 传递而非压平成 `404`；降级读降级为"无法解析"，
+永不伪造成功。
 
-| Round | Source doc (now archived) | Highlights (all resolved) |
-| --- | --- | --- |
-| Thermo review | `thermo-nuclear-review.md` | Source-log failure preserved (no more flattened 404); client retry no longer duplicates target sessions; collision-safe path segments; full effective config; stored sequence-numbered snapshots (clock-free); workspace-create compensation; serialized WAL + trim keeps in-flight; dead wrapper/stale-doc removal |
-| Findings round | `thermo-nuclear-review-findings.md` | `/complete` accepted-report is required + bounded same-attemptId (no false "done"); order-insensitive batch key; all-or-nothing rewrite; single source-ref scanner; snapshotIds via `isSafeOrderId`; single attachment guard; workspace-state gating on packaged manifest; collapsed prompt builders |
-| Struct round | `thermo-nuclear-review-current.md` | Snapshot descendant counting under `subagents/`; unreadable snapshots fail closed; concurrency-safe config write; visible WAL failures + startup gating; batch in-flight key dedup; pre-step over-limit keeps whole message; invalid `snapshotIds` → 400; WAL row validation; test autodiscovery; layout reuse |
-| Next round | `thermo-nuclear-review-next.md` | Batch cap matches official `MAX_REFERENCES`; workspace scan skip symlinks/junctions; shared source-ref model; strict API body validation; snapshot readability checks the real root artifact; single/batch host+client dedup |
-| Round 09 | `thermo-nuclear-review-round-2026-09-03.md` | Removed duplicate distinct-count helpers; collapsed identity prompt wrappers; hoisted `JSONL_DIRECTORY_KIND`; dropped a dead export |
-| Round 10 | `thermo-nuclear-review-round-10.md` | Removed dead `findLogPathMatch`/`findLogUrlMatch`; dropped `snapshotRootPath` dead null branch; media type fail-closed (no `.undefined`); typed `ResumeOrderUiState`; dropped dead `ResumeStage` re-exports |
-| Strict re-assessment | `code-quality-assessment.md` | F1 layering honesty, F2 contract dedup, F3 code consolidation (canonical-helper reuse), F4 spaghetti convergence (all implemented) |
-| Round 11 | `thermo-nuclear-review-round-11.md` | One repeated-conditional residue: the safe-token rule was still hand-rolled at `/complete` and `readSnapshotIds`; consolidated through one validator. Watch item resolved: `api.ts` 454 lines → decomposed into `routes.ts` (393) + `api.ts` (72) dispatch/transport shell under F5. `npm test` 116 green. |
-| Round 12 | `thermo-nuclear-code-quality-review.md` | Fresh review + "一并处理". Closed the Round-11 `/complete` residual with a field-scoped `readRequiredToken`; unified the getter-facade convention (`readCacheRootSafe` into `service.ts`); a single instruction-resolution seam (`resolveResumeInstruction`); scoped the client executor (`createResumeExecutorScope`); removed the `ResumeOrderPlan` alias; fixed the route-count doc drift. **118/118 green.** |
-| Round 13 (current) | `CODE-QUALITY-REVIEW.md` / `CODE-QUALITY-REVIEW-CURRENT.md` (review workspace) | Fresh current-state pass (verdict PASS) plus driven cleanups: collapsed the dead `ResumeSessionConnection` carrier to return just the session id; derived the mention token from `SESSION_REFERENCE_SCHEME` (no duplicate scheme literal); fanned out independent `resolveSession` calls with `Promise.all`; scoped the config write queue per cache root; hardened the WAL-recovery-gating and concurrent-config-write tests to make their claims observable. **118/118 green.** |
+**P5 幂等与排序不信任墙钟**：快照用存储整数序数（非 `Date.now()`）；attempt id 回退是 per-scope
+单调计数器；WAL 追加式、latest-wins；`completeResume` 幂等且有界。
 
-> Round count note: Round 11 reported "116 tests"; Round 12 added 2 regression tests → **118**.
-> The `api.ts` size figure drifted between rounds (446 vs 454): the authoritative number is that
-> `api.ts` held every handler inline at 454 and became a 72-line dispatch shell after Round 11.
+**P6 模块级可变状态放进显式 scope**：用 `createResumeExecutorScope()` 给每个 host 环境确定性
+attempt id 序列与 in-flight 去重，UI 调用签名不变；默认保留单实例行为。
 
----
+**P7 文档诚实是质量信号，过期数字是 trust 债**：陈旧注释/过时契约描述会让未来读者信错方向——
+正因为此，文档系统要求"当前为真"（见 `docs/README.md`）。
 
-## 3. 举一反三 — governing principles drawn across every round
+**P0 每次改动附回归测试 + 保持全绿**：`npm run typecheck` + `npm test` + `npm run build` 是固定验证命令。
 
-Each round produced a local fix; the durable value is the *generalized* rule that prevented the
-class of the fix. These are the cross-document conclusions to grep for before writing any future
-code in this tree.
+## 2. 当前发现状态
 
-**P1 — A rule is single-sourced, and the reader is used in the correct mode.**
-The safe-token rule is the canonical example: a round "centralizing" `readOptionalToken`
-(R10) still left two hand-rolled re-derivations (R11 `/complete`, `readSnapshotIds`), and R11
-"fixed" `/complete` with optional+required check, which R12 then saw as the wrong *mode* and
-upgraded to `readRequiredToken`. Lesson: don't just delete the duplicate — also make sure each
-caller selects the right variant (optional vs required, `string` vs `string | undefined`) so the
-type and the branch both disappear, not just the copy of the rule.
+状态：已解决（有回归测试）· 有意保留（文档化）。
 
-**P2 — Delete a whole concept, don't rearrange it.**
-Every round that added indirection/getting-worse was reversed by *deleting* the concept, not
-polishing: identity `ResumeOrderPlan = ResumePlan` alias (R12), identity prompt wrappers (R9),
-dead `findLogPathMatch`/`findLogUrlMatch` (R10), duplicate distinct-count helpers (R9). Test for
-every abstraction: "does it prevent a concrete failure?" — if no, delete.
+### 2.1 结构 / 边界
+- `shared/plan.ts` 单一 wire 契约；host `config`/`cache-root` 归 host；浏览器接线归 `client/resume-client.ts`；
+  纯文本在 `shared/resume-text.ts`。 ✅
+- 单一 `isResumePlan`（WAL + remote 共用）✅
+- 一个 `buildResumePrompt`；共享 `retryWithBackoff` ✅
 
-**P3 — Every concern has a canonical home, and boundary split separates orchestration from
-business logic.**
-`shared/plan.ts` owns the one wire contract; `api.ts` owns dispatch/transport (loopback, rate
-limit, request id, 404/500, WAL wiring) and `routes.ts` owns per-endpoint business logic and
-request-shape validation (R11). Every service/facade read converges on `service.ts` (R12). New
-code goes to the owning layer, not to a near-by module.
+### 2.2 可靠性与正确性
+- `completeResume` 失败不吞：上报必填、有界、同 attemptId；不产生假 `done` ✅
+- resolve + connect 只一次；仅 prompt 在同一 id 上重试（不重复建目标会话）✅
+- 批量不丢 workspace-state 指针 ✅
+- 源日志失败保留 `404/501` 而非压平成 `404` ✅
+- 批量上限与官方一致（`MAX_SOURCE_SESSIONS = MAX_REFERENCES`）✅
+- `/complete` 要求用 `readRequiredToken`（field-scoped）✅
+- 事件载体解析带 shape guard，fail-closed ✅
 
-**P4 — Fail closed, and preserve the real status/error across a boundary.**
-Unknown media type is skipped + logged (no `.undefined`), unreadable snapshots are `readable:
-false`, source-log failures travel as `404/501/500` — never flattened to a generic 404.
-A degraded read degrades to "cannot resolve", never to a fabricated success.
+### 2.3 边界与安全
+- 工作区扫描不跟随 symlink/junction ✅
+- 快照 id/prune 按存储序号、不按时钟 ✅
+- `hasWorkspaceState` 只以打包 `manifest.json` 为准 ✅
+- `safePathSegment` 防 `child/child_` 与 `sha256:` 碰撞（`~<sanitized>_<sha256>`）✅
+- remote 参数严格校验；批量 `snapshotIds` 键必须 ⊆ `sessionIds` ✅
+- pre-step 改写 all-or-nothing ✅
+- 未知 media 跳走并记录，`layout.media` 诚实 ✅
 
-**P5 — Idempotency and ordering never trust the wall clock.**
-Snapshots are stored integer-sequence-numbered (not `Date.now()`); the attempt-id fallback is a
-per-scope monotonic counter; WAL is append-only with latest-wins; `/complete` is idempotent and
-bounded. (Rate-limiting *may* use the clock — the "no clock" rule targets idempotency keys and
-ordering.)
+### 2.4 类型与边界收紧
+- client 订单状态 `ResumeOrderUiState` 联合（非裸 `string`）✅
+- 必填/可选 token 读取 field-scoped ✅
 
-**P6 — Module-level mutable state is behind an explicit scope, though the caller interface
-doesn't change.**
-R12 replaced bare `attemptSeq`/`resumeOrdersInFlight` with `createResumeExecutorScope()`, giving
-tests a deterministic per-scope id generator and per-scope in-flight dedup while keeping every
-UI call signature intact. Reuse the default scope for single-instance behavior.
+## 3. 有意保留（非 churn）
 
-**P7 — Doc honesty is a code-quality signal; stale figures are trust debt.**
-R12 fixed a "eight vs nine handler bodies" doc drift and a dead identity alias — cheap, but
-exactly the kind of stale comment that makes a future reader trust the wrong thing.
+- 附件双重守卫（文本日志也需附件库）——fail-closed 默认。
+- `titleFromObservation`/快照标题跨版本差异——薄而受控。
+- 批量对 `snapshotIds` 的 in-flight key 忽略——当前无 UI 传显式 snapshot id；出现输入路径时再改。
+- 快照 + WAL 为单进程原子——部署边界，文档化。
+- `resolveFromText`/`resolveSession` 把查询失败折叠为 `null`（`resolveLogPath` 才是干净 404/501 的 plan 路径）——容忍契约。
+- Remote 方法全必填、缺省用空串/空对象——协议限制（不表达缺省），有意为之。
 
-**P0 — Verify each applied change with a regression test and a green suite.**
-Every round's "一并处理" landed with `npm run typecheck` + `npm test` green (`114→116→118`),
-regression tests added for each change, and `npm run build:client` PASS.
+## 4. 结构现状（standing）
 
----
+- Host 传输是 typert `SessionResumeService`（`@Remote` 9 端点）；client 经 `remoteFacade`。
+- 新端点/新逻辑放"所属层"：规划 `shared/plan.ts`、host core、client `resume-client.ts`；不在 route shell 堆。
+- 后续仍应遵循 P1–P3：重复/条件收进所属层 canonical 抽象。
 
-## 4. Master findings list (deduplicated across all rounds)
-
-Only the **current status** matters; earlier round-prose that duplicates a later fix is folded
-here. Status: ✅ resolved (verified by regression test) · 🔒 documented (kept as intended
-behavior).
-
-### 4.1 Structure / boundaries (F1–F4, all ✅)
-
-| Finding | Status | Evidence |
-| --- | --- | --- |
-| F1 `shared/` layering was dishonest (host-only & client-only modules mixed in) | ✅ | Host `config`/`cache-root` moved to `host/`; client browser wiring → `client/resume-client.ts`; pure text in `shared/resume-text.ts` |
-| F2 `ResumePlan` shape guard written twice (WAL + fetch) | ✅ | Single `isResumePlan` in `shared/plan.ts` |
-| 3 near-identical prompt builders + duplicated retry loop + tripled UI finish-mapping | ✅ | One `buildResumePrompt`; shared `retryWithBackoff`; `runResumeOrderWithUi` |
-| F4 highest spaghetti: runtime image-shape probing (`collectEventImageRefs`) | ✅ | Data-driven `eventContentRoots` + single recursive walker |
-
-### 4.2 Reliability & correctness (P0/P1) — all ✅
-
-| Finding | Resolution |
-| --- | --- |
-| `/complete` failure swallowed → UI success + retry could mint a 2nd target session | ✅ report required, bounded, same attemptId; no false `done` |
-| Client retry minted new attemptId → duplicate target session | ✅ resolve + connect once; only prompt retried on same id |
-| Batch dropped the workspace-state pointer single honors | ✅ shared suffix appended when any source packaged state |
-| Host source-log failure flattened to 404 | ✅ `SessionLogPathResult` preserves 404/501 |
-| Batch cap (5) overran official `maxReferences` (=3/MAX_REFERENCE) | ✅ `MAX_SOURCE_SESSIONS = MAX_REFERENCES = 3` |
-| Runtime event carrier parsed without shape guards | ✅ `Array.isArray` + shape guards, fail-closed |
-| `/complete` hand-rolled required-token (R11 residual) | ✅ field-scoped `readRequiredToken` (R12); required/optional readers each used correctly |
-
-### 4.3 Boundaries & safety — all ✅
-
-- Workspace scan never follows symlink/junction targets ✅
-- snapshot ids/prune not sorted by wall-clock ✅ (stored integer sequence)
-- `hasWorkspaceState` gates only on packaged `manifest.json` ✅
-- two-source `safePathSegment` collision (child vs child_) ✅ `~<sanitized>_<sha256>`
-- `/resume-batch` body strictly validated → 400 ✅
-- pre-step rewrite all-or-nothing ✅
-- single attachment guard (no dual timing) ✅
-- unknown media skipped + logged, `layout.media` honest ✅
-
-### 4.4 Dead surface removed — all ✅
-| Remove | Round |
-|---|---|
-| Test-only `countDistinctLogSessions`/`countDistinctLogPaths` | 09 |
-| Test-only `findLogPathMatch`/`findLogUrlMatch`; `snapshotRootPath` dead null branch | 10 |
-| Identity prompt wrappers; `defaultCacheRoot` private | 09 |
-| Dead `sessionReferenceResolver` inject; `created` audit status | Findings |
-| `ResumeStage` re-exports in `order.ts`/`batch.ts` | 10 |
-| `ResumeOrderPlan = ResumePlan` identity alias | 12 |
-| Duplicate `readCacheRootSafe` (snapshot-store) — unified into `service.ts` | 12 |
-
-### 4.5 Type & boundary tightening
-- `readTitleSnapshots` 6-way optional union — 🔄 intentionally kept (real runtime shape; readable).
-- Client order state typed `ResumeOrderUiState` union instead of bare `string` ✅
-- `isResumePlan` shared contract for WAL + fetch ✅
-- Required-vs-optional token reader field-scoped (R12) ✅
-
----
-
-## 5. Intentional / documented notes (deliberately kept — not churn)
-
-- **Attachment double guard** — materialization requires an attachment store even for text-only
-  logs; reachable only after that guard. Intended fail-closed default.
-- **`titleFromObservation` / readTitleSnapshots variance** — unavoidable across two official
-  session-query API versions; thin and contained.
-- **Batch vs single in-flight keys ignore `snapshotIds`** — inert today (no UI passes explicit
-  snapshot ids); revisit when an input path starts.
-- **Snapshots + WAL are single-process atomic** — redocumented deployment boundary, not changed.
-- **`resolveSession`/`resolveFromText` flatten a query failure to `null`** (→ `/copy` 404) —
-  deliberate tolerant contract (R10/R11 choice); the clean 404/501 split lives on
-  `resolveSessionLogPath` (the plan path).
-- **`rate-limit.ts` wall-clock** — correct; the "no clock" rule targets idempotency/ordering.
-- **Shallow plan copies in `resume-order.ts`** — safe because `plan` is replaced, never mutated
-  in place; guarded top-level fields.
-
----
-
-## 6. Forward-looking notes
-
-- **F5 resolved** — add new endpoints to `routes.ts`; keep `api.ts` as loopback/limiter/dispatch
-  shell. This is the standing structure, not a future note.
-- **P6 extension** — keep building executor/other per-context state behind explicit scopes.
-- Any new ad-hoc conditional/duplication should follow the "collapse into the canonical
-  abstraction in the owning layer" convention (P1–P3).
-
----
-
-## 7. How to close / verify
+## 5. 验证（固定命令，非数字）
 
 ```
 npm run typecheck
-npm test          # 118
-npm run build:client
+npm test
+npm run build
 ```
+三者全绿即当前树健康；断言是否会漂移由测试文件决定，不由本文件的数量记录决定。
 
-All pass on the current tree. This consolidated file is the single thermo-nuclear review report;
-per-round thermo-nuclear docs have been folded in and removed, pointing here.
-
----
-
-*Final note: rounds 1–12 maintained a single high bar — no structural regression, no file-size
-explosion at the 500/1000-line boundaries, and no spaghetti-branch growth; every applied fix was
-regression-tested and the suite kept green. The governing principles (见 §3 举一反三) are the
-durable result this single report exists to preserve.*
+*治理原则（§1）是本文件最持久的内容；轮次/时序/行数等历史已不保留。*

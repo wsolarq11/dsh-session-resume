@@ -16,7 +16,7 @@ import { execFile } from 'node:child_process'
 import { lstat, readdir } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import type { HostContext } from './types.js'
+import type { HostContext } from '../../contract/host-types.js'
 
 const execFileAsync = promisify(execFile)
 

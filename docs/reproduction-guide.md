@@ -230,7 +230,10 @@ npm pack --pack-destination dist
   "type": "module",
   "main": "./lib/index.js",
   "types": "./lib/types/index.d.ts",
-  "files": ["lib", "cordis.patch.yml"],
+  "files": ["lib", "cordis.patch.yml",
+    "lib/typert.host.js", "lib/typert.host.d.ts",
+    "lib/typert.client.js", "lib/typert.client.d.ts",
+    "lib/typert.remote-client.js", "lib/typert.remote-client.d.ts"],
   "private": true,
   "license": "BSD-3-Clause",
   "exports": {
@@ -242,7 +245,19 @@ npm pack --pack-destination dist
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./typert": {
+      "types": "./lib/typert.host.d.ts",
+      "default": "./lib/typert.host.js"
+    },
+    "./remote": {
+      "types": "./lib/typert.remote-client.d.ts",
+      "default": "./lib/typert.remote-client.js"
+    }
   },
   "dsh": {
     "bundle": {
@@ -278,7 +293,8 @@ npm pack --pack-destination dist
 
 ```text
 src/
-  index.ts              # 插件入口：注册 Host API + agent/pre-step 改写；导出全部能力
+  index.ts              # 插件入口：实例化 SessionResumeService、安装 typert 自愈、挂钩 agent/pre-step；导出全部能力
+  typert-meta.d.ts      # 单包协议面（供 generator 与 client type-face 解析）
   shared/               # Host/Client 共用纯逻辑（无 React）
     constants.ts        # MAX_REFERENCES=3、RESUME_INSTRUCTION
     session-uri.ts      # dsh-session: base64url(JSON.stringify(sessionId)) 编解码 + mention
@@ -290,7 +306,7 @@ src/
     batch-text.ts       # 批量续跑文本构建（多快照路径列表）
   host/
     types.ts            # Host 侧 DSH 服务显式接口
-    api.ts              # /resume、/complete、/config、/snapshots、/resume-batch 路由 + 安全/审计
+    session-resume-service.ts  # SessionResumeService（typert @Remote，9 端点，委托给纯域核心）
     session-log.ts      # 会话记录查找、标题/mention、日志定位
     log-materialize.ts  # readRaw -> 官方导出同构快照目录物化（snapshots/<snapshotId> + workspace-state + 裁剪）
     snapshot-store.ts   # 快照布局唯一所有者：安全路径段、缓存根、list/prune、layout 真实读取
@@ -298,7 +314,6 @@ src/
     resume-order.ts     # attemptId 订单幂等守卫 + 可选 WAL 持久化
     order-wal.ts        # orders.jsonl 追加式 WAL（最新行胜出、容忍坏行）
     workspace-state.ts  # 文件树清单 + git 状态扫描（有界、降级为空）
-    rate-limit.ts       # 滑动窗口限流（20 次/分钟）
     audit.ts            # session-resume.order 结构化审计
     service.ts          # readService：统一读取注入服务（属性或 ctx.get 二选一）
     workspace.ts        # workspaceRegistry 解析/创建
@@ -310,18 +325,23 @@ src/
     dock-ui.ts          # dock/button 共用 UI 样式、状态标签、动作簇
     order.ts            # 单会话 ResumeOrder 薄包装（in-flight 去重）
     batch.ts            # 批量续跑薄包装（in-flight 去重）
-    resume-executor.ts  # 单/批量共用执行器（resolve → connect → prompt 重试 → 上报）
+    resume-executor.ts   # 单/批量共用执行器（resolve → connect → prompt 重试 → 上报）
+    resume-client.ts     # 会话创建/复用、指令解析、typert remote 调用（remoteFacade）
 tests/
   session-uri.test.mjs  session-url.test.mjs  session-path.test.mjs  source-ref.test.mjs
-  rewrite.test.mjs      batch-key.test.mjs
-  host-path.test.mjs    resume.test.mjs       resume-plan.test.mjs   rate-limit.test.mjs
-  order.test.mjs        api-security.test.mjs config.test.mjs        snapshots.test.mjs
-  workspace-state.test.mjs  batch.test.mjs    order-wal.test.mjs     client-executor.test.mjs
+  rewrite.test.mjs      batch-key.test.mjs    legacy-surface.test.mjs
+  host-path.test.mjs    resume.test.mjs       resume-plan.test.mjs
+  order.test.mjs        order-wal.test.mjs    order-no-wal-empirical.test.mjs
+  config.test.mjs       snapshots.test.mjs    workspace-state.test.mjs
+  batch.test.mjs        client-executor.test.mjs
 scripts/
-  smoke-api.mjs         # live API 冒烟（配置往返、快照列表、批量守卫、404 兜底）
+  build.sh              # Host 编译 + client bundle（junction 链）
+  release.ps1           # 打包发布产物
+  e2e-final.mjs         # 真机 typt 网关 9 端点断言
+  e2e-user-click.mjs    # 真实点击数字增量断言
 docs/
-  README.md  session-resume-architecture.md  verification.md
-  thermo-nuclear-review-consolidated.md  reproduction-guide.md  CHANGELOG.md   # 本指南即在其中
+  README.md  session-resume-architecture.md  verification.md  reproduction-guide.md
+  CHANGELOG.md  native-migration-runbook.md  # 本指南即在其中
 .github/workflows/ci.yml
 ```
 
@@ -330,36 +350,47 @@ docs/
 ```ts
 export const name = '@dsh-external/dsh-session-resume'
 export const inject = [
-  'webServer', 'sessionQuery', 'sessionReferenceResolver',
-  'sessionPersistence', 'sessions', 'workspaceRegistry', 'attachments',
+  'webServer', 'sessionQuery', 'sessionPersistence',
+  'sessions', 'workspaceRegistry', 'attachments', 'typert',
 ]
 // 声明模块：'agent/pre-step'(payload, next) 事件
-// apply(ctx): 
-//   ctx.effect(() => registerResumeApi(ctx), 'session-resume: api')
+// 导出：SessionResumeService / SESSION_RESUME_SERVICE_KEY / RemoteResolveResult
+//       rewriteText / MAX_REFERENCES / RESUME_INSTRUCTION
+// apply(ctx):
+//   ctx.effect(() => { new SessionResumeService(ctx) }, 'session-resume: remote service')
+//   installTypertSelfHeal(ctx)   // reload 后重挂被 withdraw 的 sessionResume/* 命名空间
 //   ctx.effect(() => ctx.on('agent/pre-step', async (payload, next) => {
 //       decision = await next()
 //       if kind !== 'enter' return decision
-//       对每条 user 文本块调用 rewriteText -> 把旧 export URL 改写为 mention
+//       对每条 user 文本块调用 rewriteMessage -> 把旧 export URL 改写为 mention
 //   }), 'session-resume: pre-step')
-// 导出（供测试/外部引用）：
-//   rewriteText / MAX_REFERENCES / RESUME_INSTRUCTION；底层工具经各模块直导：
-//   session-uri.encodeSessionUri / decodeSessionPayload / formatMention、
-//   session-path.findLogPathMatches / isSessionLogPath、resume-text.buildResumePrompt 等
 ```
 
-### 3.4 Host API 契约
+上面 ts 块对应 Host 半区。Client 半区（`src/client/index.ts`）另外挂载 remote：
 
-见 `docs/session-resume-architecture.md` §5。要点：
+```ts
+export const inject = ['slots', 'sessions', 'workspaces', 'remote']
+// apply(ctx):
+//   ctx.effect(() => remote.$mount(TYPERT_REMOTE), 'session-resume: remote mount')
+//   ctx.effect(() => ctx.slots.inject('conversation.session.header.utilities', '自动续跑' 按钮))
+//   ctx.effect(() => ctx.slots.inject('conversation.input.dock', 路径识别 dock))
+```
 
-- `POST /session-resume/api/resume`：请求 `{ sessionId, attemptId? }`；
-  成功 `200` 返回 `{ ok, requestId, attemptId, sources[], target{} }`；
-  错误码 `400/403/404/409/429/501` 语义严格按架构文档。
-- `POST /session-resume/api/complete`：`{ attemptId, targetSessionId, status: accepted|failed }`；
-  幂等、冲突 409、未知 404。
-- 兼容 API：`GET /path`、`GET /copy`、`POST /resolve`、`agent/pre-step`。
-- 安全：仅 `127.0.0.1`/`::1`/`::ffff:127.0.0.1`；响应回显 `requestId`；
-  `/resume` 每调用方滑动窗口 20 次/分钟；响应体 ≤ 64 KiB。
-- 审计：每次解析输出一行 `{"event":"session-resume.order",...}`。
+> **传输真相：** 不经过自建 HTTP。Host 暴露 `ctx.remote.sessionResume.*`；Client 经
+> `remoteFacade(ctx)`（优先 `ctx.get('remote.sessionResume')`，回退 `ctx.remote.sessionResume`）调用。
+
+### 3.4 Remote 契约（ctx.remote.sessionResume.*）
+
+见 `docs/session-resume-architecture.md` §5。要点（参数一律必填，空串/空对象表缺省）：
+
+- `resolveFromText(text)` / `resolveSession(sessionId)` / `resolveLogPath(sessionId)`：
+  从文本 / id 解析源会话。
+- `resolvePlan(sessionId, attemptId, snapshotId)`：单会话续跑计划
+  （`snapshotId` 命中则复用历史快照；不解析时 `{ok:false,status,error}`）。
+- `resolveBatchPlan(sessionIds, attemptId, snapshotIds)`：批量续跑计划，`sessionIds[0]` 为主键串行。
+- `completeResume(attemptId, status, targetSessionId, error)`：`accepted|failed` 终态；同 attempt 幂等。
+- `getConfig()` / `setConfig(config)` / `listSnapshots(sessionId)`：配置读写与历史快照列表。
+- 审计：每次计划解析输出一行结构化审计（`attemptId/sourceSessionId/targetWorkspaceId/status`）。
 
 ### 3.5 物化目录契约
 
@@ -371,7 +402,7 @@ export const inject = [
 ```
 
 - `<safeId>` = 全安全字符 ID 保持原名；非安全 ID（如 `sha256:<digest>`）映射为
-  `~<sanitized>_<sha256摘要>`；未知 mediaType → `.undefined`。
+  `~<sanitized>_<sha256摘要>`；未知 mediaType **fail-closed 跳过并记录**（不落 `.undefined`）。
 - 文件名 fail-closed：拒绝 `..`、`/`、`\`、绝对路径、超长。
 - 物化前要求 `sessionPersistence.supportsRawArtifacts === true` 且附件服务可用；
   live 会话先 `sessions.flush()`；不可用返回 501，不产生残缺目录。
@@ -386,9 +417,9 @@ export const inject = [
 
 > 唯一事实源是 `src/shared/constants.ts` 的 `RESUME_INSTRUCTION`（另由
 > `tests/resume.test.mjs` 冻结断言全文）；本示例仅为文档快照，若与常量不一致，
-> 以常量与测试为准。自动流程（Header/Dock）统一经 `buildResumePathPrompt` 拼前缀。
+> 以常量与测试为准。自动流程（Header/Dock）统一经 `buildResumePrompt`（`src/shared/resume-text.ts`）拼前缀。
 
-### 3.7 客户端握手（src/shared/resume.ts 行为）
+### 3.7 客户端握手（src/client/resume-client.ts 行为）
 
 ```text
 if (target.workspaceId && workspaces?.connectWorkspace)  -> connectWorkspace(workspaceId)
@@ -426,7 +457,7 @@ dev_inject_plugin <本仓库绝对路径>
 2. 确认插件包声明 `dsh.bundle.patch`，且 `cordis.patch.yml` 随安装包存在。
 3. 再把本包加入 profile 的 `dependencies` 与 `dsh.profile.bundles`
    （`dev_install_package` 可免重启热装配，但会同时写入 profile bundles 装配链）。
-4. 重启后验证 `/session-resume/api` 只注册一次。
+4. 重启后验证 `sessionResume/*` remote 命名空间只注册一次（reload 后被 self-heal 重挂仍稳定 LIVE）。
 
 bundle 与 super 不能并存；同时存在会重复 apply，报 `duplicate prefix route`。
 
@@ -434,12 +465,12 @@ bundle 与 super 不能并存；同时存在会重复 apply，报 `duplicate pre
 
 | # | 操作 | 期望 |
 | --- | --- | --- |
-| 1 | `npm ci && npm run typecheck && npm test` | 全部 PASS，`lib/` 生成 |
+| 1 | `npm ci && npm run typecheck && npm test` | 全部 PASS，`lib/` 生成且含 `lib/typert.*` |
 | 2 | 刷新 DSH Web，打开任意会话 | Header utilities 槽出现「自动续跑」按钮 |
-| 3 | 点击「自动续跑」 | `/resume` 200；新会话在原工作区打开；首条消息含目录路径 + 续跑指令 |
-| 4 | Host 日志 | 出现 `session-resume.order` 审计行；`/complete` accepted |
-| 5 | 旧路径兼容 | 粘贴 `/api/session.export?...` → 输入框上方出现识别条；直接发 URL 被 pre-step 改写为 mention |
-| 6 | 安全回归 | 非回环请求 403、超限 429、缺 sessionId 400、未知会话 404 |
+| 3 | 点击「自动续跑」 | `resolvePlan` 成功；新会话在原工作区打开；首条消息含目录路径 + 续跑指令 |
+| 4 | Host 日志 | 出现 `session-resume.order` 审计行；`completeResume` accepted 落入 WAL |
+| 5 | 旧路径兼容 | 粘贴旧 export URL → 输入框出现识别条；直接发 URL 被 pre-step 改写为 mention |
+| 6 | 契约回归 | 缺 sessionId → `{ok:false,status:400}`；未知会话 → 404；冲突终态 → 返回当前终态 |
 | 7 | 物化一致性 | `%TEMP%\dsh-session-resume\<sid>\` 与官方 export ZIP 解压逐字节一致（安全 ID；非安全 ID 走防碰撞映射） |
 
 > 完整 E2E 实测记录见 `docs/verification.md`；本文不再重复。
@@ -491,6 +522,13 @@ jobs:
    （详见架构文档 §9、CHANGELOG）。
 9. **`lib/` 中 `client/` 目录与 `client.js` 并存**：这是 tsc 镜像（`src/client/*.ts`）
    与 tsdown 单文件 bundle（`src/client/index.ts`）的正常共存，不要删任一。
+10. **client 读 `ctx.remote.sessionResume` 报 `without inject`**：须先 `remote.$mount(TYPERT_REMOTE)` 挂载，
+   并经 `remoteFacade`（`ctx.get('remote.sessionResume')` 优先）取用，不要裸读属性。
+11. **Host 端 `sessionResume/*` 被 withdraw**：reload/re-inject 可能把 typert 注册抽离成 withdrawn，
+    网关拒调。由 `installTypertSelfHeal` 在 `hasSeen && get()===undefined` 时自动重挂 + 轮询兜底；
+    若失效先确认 `src/index.ts` 的自愈守卫在位。
+12. **Remote 方法可选参数**：typert 协议不支持可选参数（SRC 不表达缺省）。所有 `@Remote` 方法
+    参数一律必填，缺省用空串/空对象在方法体内表示；不要手写"可选参数"。
 
 ---
 
@@ -501,7 +539,9 @@ jobs:
 - [ ] `npm test` 自动发现 `tests/` 下全部测试文件并 PASS。
 - [ ] `npm run build` 生成 `lib/index.js`、`lib/client.js`、`lib/types/`；
       client bundle 含 ModuleLoader 包装。
-- [ ] `npm pack --pack-destination dist` 生成 `dist/...tgz`，内容 = 仅 `lib/`。
+- [ ] `npm pack --pack-destination dist` 生成 `dist/...tgz`，内容含 `lib/` 与 typert 产物。
 - [ ] 注入后 GUI 出现「自动续跑」按钮，点击后新会话收到续跑指令。
-- [ ] `/resume`、`/complete`、限流、安全码与架构文档契约一致。
+- [ ] `ctx.remote.sessionResume.*`（resolvePlan / resolveBatchPlan / completeResume / getConfig / …
+      ）与架构文档契约一致；终端 session 冲突幂等。
+- [ ] Host reload/re-inject 后 `sessionResume/*` 仍 LIVE（self-heal 未漂回 withdrawn）。
 - [ ] 物化目录与官方 export ZIP 逐字节一致（安全 ID；非安全 ID 走防碰撞映射）。

@@ -8,9 +8,9 @@ import {
   buildWorkspaceManifest,
   WORKSPACE_MANIFEST_FILE,
   WORKSPACE_GIT_FILE,
-} from '../lib/host/workspace-state.js'
-import { buildResumePrompt } from '../lib/shared/resume-text.js'
-import { materializeSessionLogExport } from '../lib/host/log-materialize.js'
+} from '../lib/io/fs/workspace-state.js'
+import { buildResumePrompt } from '../lib/pure/text/resume-text.js'
+import { materializeSessionLogExport } from '../lib/io/fs/log-materialize.js'
 
 async function freshWorkspace() {
   const root = join(tmpdir(), 'dsh-session-resume-ws-tests', randomUUID())

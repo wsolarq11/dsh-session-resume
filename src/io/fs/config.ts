@@ -19,7 +19,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { resolveCacheRoot } from './cache-root.js'
-import { RESUME_INSTRUCTION } from '../shared/constants.js'
+import { RESUME_INSTRUCTION } from '../../pure/text/constants.js'
 
 export { RESUME_INSTRUCTION }
 

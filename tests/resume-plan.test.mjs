@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { resolveResumePlan } from '../lib/host/resume-plan.js'
+import { resolveResumePlan } from '../lib/orchestration/host/resume-plan.js'
 
 function queryFor(records) {
   return {

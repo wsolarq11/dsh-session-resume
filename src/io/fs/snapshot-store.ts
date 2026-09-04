@@ -10,7 +10,7 @@
 import { createHash } from 'node:crypto'
 import { mkdir, readdir, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { readCacheRootSafe, type CacheRootFacadeLike } from './service.js'
+import { readCacheRootSafe, type CacheRootFacadeLike } from '../../orchestration/host/service.js'
 
 export interface SnapshotLayoutStats {
   root: string

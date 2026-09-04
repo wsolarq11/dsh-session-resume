@@ -15,8 +15,8 @@ import type {
   SessionPersistenceLike,
   SessionQueryLike,
   SessionStoreLike,
-} from './types.js'
-import { resolveCacheRoot } from './cache-root.js'
+} from '../../contract/host-types.js'
+import { resolveCacheRoot } from '../../io/fs/cache-root.js'
 
 /** The HostContext field that carries the optional test-only cache root. */
 export type CacheRootFacadeLike = { resumeCacheRoot?: string }

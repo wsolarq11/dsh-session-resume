@@ -11,7 +11,7 @@
  * restarts.
  */
 
-import type { ResumePlan } from './resume-plan.js'
+import type { ResumePlan } from '../../orchestration/host/resume-plan.js'
 import type { ResumeOrderWal } from './order-wal.js'
 
 export interface ResumeOrderLogger {

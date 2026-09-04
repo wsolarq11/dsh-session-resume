@@ -1,6 +1,6 @@
 /** Structured audit line for every resume order attempt. */
 
-import type { HostContext } from './types.js'
+import type { HostContext } from '../../contract/host-types.js'
 
 export type ResumeAuditStatus = 'resolved' | 'accepted' | 'failed'
 
