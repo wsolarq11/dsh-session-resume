@@ -61,8 +61,8 @@ $hash = (Get-FileHash -LiteralPath $tgzPath -Algorithm SHA256).Hash.ToLowerInvar
 Write-Host "    SHA256 $hash"
 
 if ($Commit) {
-    Invoke-Native -FilePath 'git' -Arguments @('-C', $repoRoot, 'add', '.gitignore', 'dist', 'scripts/release.ps1', 'package.json', 'package-lock.json')
-    Invoke-Native -FilePath 'git' -Arguments @('-C', $repoRoot, 'commit', '--allow-empty', '-m', "Release $Version prebuilt artifact")
+    Invoke-Native -FilePath 'git' -Arguments @('-C', $repoRoot, 'add', '.gitignore', 'scripts/release.ps1', 'package.json', 'package-lock.json')
+    Invoke-Native -FilePath 'git' -Arguments @('-C', $repoRoot, 'commit', '--allow-empty', '-m', "Release $Version")
     $tag = 'v' + $Version
     if ($ForceTag) {
         Invoke-Native -FilePath 'git' -Arguments @('-C', $repoRoot, 'tag', '--force', $tag)

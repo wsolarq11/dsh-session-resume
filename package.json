@@ -1,25 +1,29 @@
 {
   "name": "@dsh-external/dsh-session-resume",
   "version": "0.0.1",
-  "description": "把官方 session log 下载链接桥接为跨会话只读快照引用，支持一键续跑",
+  "description": "自动把 Host 会话日志路径带进新会话并发送续跑指令，兼容旧 session log 链接",
   "private": true,
   "type": "module",
   "main": "./lib/index.js",
   "types": "./lib/types/index.d.ts",
   "files": [
-    "lib"
+    "lib",
+    "cordis.patch.yml"
   ],
   "license": "BSD-3-Clause",
   "peerDependencies": {
     "@deepseek-ai/cordis": ">=4.0.0-rc <5",
     "@deepseek-ai/dsh-agent": ">=0.0.1-rc <2",
+    "@deepseek-ai/dsh-attachment": ">=0.0.1-rc <2",
     "@deepseek-ai/dsh-client-runtime": ">=0.0.1-rc <2",
     "@deepseek-ai/dsh-client-ui-conversation": ">=0.0.1-rc <2",
     "@deepseek-ai/dsh-client-ui-slots": ">=0.0.1-rc <2",
     "@deepseek-ai/dsh-llm": ">=0.0.1-rc <2",
     "@deepseek-ai/dsh-session-query": ">=0.0.1-rc <2",
+    "@deepseek-ai/dsh-session-persistence": ">=0.0.1-rc <2",
     "@deepseek-ai/dsh-session-reference": ">=0.0.1-rc <2",
     "@deepseek-ai/dsh-tools": ">=0.0.1-rc <2",
+    "@deepseek-ai/dsh-workspace": ">=0.0.1-rc <2",
     "@deepseek-ai/schemastery": "^3.18.0"
   },
   "devDependencies": {
@@ -42,7 +46,8 @@
     "build": "bash scripts/build.sh",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build:client": "tsdown",
-    "test": "node --test tests/session-uri.test.mjs tests/session-url.test.mjs tests/rewrite.test.mjs"
+    "pretest": "npm run build",
+    "test": "node --test \"tests/*.test.mjs\""
   },
   "exports": {
     ".": {
@@ -56,6 +61,9 @@
     "./package.json": "./package.json"
   },
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "inject": [
         "@deepseek-ai/dsh-client-runtime",

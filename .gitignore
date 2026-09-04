@@ -1,6 +1,6 @@
+# 依赖与构建产物（可再生产物，不入版本库）
 node_modules/
 lib/
+dist/
 *.tsbuildinfo
 *.tgz
-!dist/
-!dist/*.tgz

@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { MAX_REFERENCES, resolveFromText, rewriteText } from '../lib/index.js'
+import { MAX_REFERENCES, rewriteText } from '../lib/index.js'
+import { resolveFromText } from '../lib/host/session-log.js'
 
 function sessionQuery(records) {
   return {
@@ -37,7 +38,27 @@ test('skips the target agent session and unresolved ids', async () => {
   assert.equal(rewritten, text)
 })
 
-test('caps distinct references at the official maximum', async () => {
+test('leaves the whole message unchanged when any reference cannot be resolved', async () => {
+  // Here the unresolved `missing` reference is NOT the target agent, so a naive
+  // partial rewrite would have produced a mention + raw-URL mix. It must not.
+  const ctx = ctxFor([{ header: { id: 'sess_1', title: '任务 A' } }])
+  const text = '/api/session.export?sessionId=sess_1 /api/session.export?sessionId=missing'
+  const rewritten = await rewriteText(ctx, text, 'agent-b')
+  assert.equal(rewritten, text)
+})
+
+test('rewrites exactly three distinct references without leaving a fourth raw URL', async () => {
+  const records = [1, 2, 3].map((n) => ({ header: { id: `sess_${n}`, title: `任务 ${n}` } }))
+  const ctx = ctxFor(records)
+  const text = [1, 2, 3]
+    .map((n) => `/api/session.export?sessionId=sess_${n}&includeDescendants=true`)
+    .join(' ')
+  const rewritten = await rewriteText(ctx, text, 'agent-b')
+  assert.equal((rewritten.match(/dsh-session:/g) ?? []).length, 3)
+  assert.doesNotMatch(rewritten, /api\/session\.export/)
+})
+
+test('leaves all legacy URLs unchanged when the reference cap is exceeded', async () => {
   const records = [1, 2, 3, 4].map((n) => ({ header: { id: `sess_${n}`, title: `任务 ${n}` } }))
   const ctx = ctxFor(records)
   const text = [1, 2, 3, 4]
@@ -45,8 +66,8 @@ test('caps distinct references at the official maximum', async () => {
     .join(' ')
   const rewritten = await rewriteText(ctx, text, 'agent-b')
   assert.equal(MAX_REFERENCES, 3)
-  assert.equal((rewritten.match(/dsh-session:/g) ?? []).length, 3)
-  assert.match(rewritten, /sess_4/)
+  assert.equal(rewritten, text)
+  assert.doesNotMatch(rewritten, /dsh-session:/)
 })
 
 test('resolves a bare canonical mention through sessionQuery', async () => {

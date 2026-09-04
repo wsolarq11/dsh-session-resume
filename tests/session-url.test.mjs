@@ -1,11 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  countDistinctLogSessions,
-  findLogUrlMatch,
   findLogUrlMatches,
   parseLogUrl,
-} from '../lib/index.js'
+} from '../lib/shared/session-url.js'
+
+const urlMatch = (text) => findLogUrlMatches(text)[0] ?? null
 
 const plain = '/api/session.export?sessionId=sess_1&includeDescendants=true'
 const absolute = 'http://127.0.0.1:3080/api/session.export?sessionId=sess_2&includeDescendants=true'
@@ -16,23 +16,29 @@ test('parses host-less and absolute official export URLs', () => {
     start: 3,
     end: 3 + plain.length,
   })
-  assert.deepEqual(findLogUrlMatch(absolute), {
+  assert.deepEqual(urlMatch(absolute), {
     id: 'sess_2',
     start: 0,
     end: absolute.length,
   })
 })
 
-test('findLogUrlMatch is reusable and does not retain global regex state', () => {
-  assert.equal(findLogUrlMatch(plain)?.id, 'sess_1')
-  assert.equal(findLogUrlMatch(plain)?.id, 'sess_1')
+test('rejects arbitrary absolute URLs that merely contain a sessionId query', () => {
+  assert.equal(urlMatch('https://example.com/other?sessionId=sess_1'), null)
+  assert.equal(urlMatch('https://example.com/api/session.export/extra?sessionId=sess_1'), null)
+  assert.equal(urlMatch('https://example.com/api/session.export?sessionId=sess_1')?.id, 'sess_1')
+})
+
+test('urlMatch is reusable and does not retain global regex state', () => {
+  assert.equal(urlMatch(plain)?.id, 'sess_1')
+  assert.equal(urlMatch(plain)?.id, 'sess_1')
 })
 
 test('strips Markdown and CJK punctuation from the URL token', () => {
   const markdown = '[日志](http://127.0.0.1:3080/api/session.export?sessionId=sess_1)'
   const chinese = 'http://127.0.0.1:3080/api/session.export?sessionId=sess_1）。'
-  assert.equal(findLogUrlMatch(markdown)?.id, 'sess_1')
-  assert.equal(findLogUrlMatch(chinese)?.id, 'sess_1')
+  assert.equal(urlMatch(markdown)?.id, 'sess_1')
+  assert.equal(urlMatch(chinese)?.id, 'sess_1')
 })
 
 test('finds and deduplicates multiple URLs', () => {
@@ -40,5 +46,4 @@ test('finds and deduplicates multiple URLs', () => {
   const hits = findLogUrlMatches(text)
   assert.equal(hits.length, 3)
   assert.deepEqual(hits.map((hit) => hit.id), ['sess_1', 'sess_2', 'sess_1'])
-  assert.equal(countDistinctLogSessions(text), 2)
 })

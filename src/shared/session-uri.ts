@@ -44,11 +44,6 @@ export function decodeSessionPayload(payload: string): string | null {
   }
 }
 
-export function decodeSessionUri(uri: string): string | null {
-  if (!uri.startsWith(SESSION_REFERENCE_SCHEME)) return null
-  return decodeSessionPayload(uri.slice(SESSION_REFERENCE_SCHEME.length))
-}
-
 export function escapeLabel(label: string): string {
   return String(label).replace(/[\\\]]/g, (char) => '\\' + char)
 }

@@ -1,0 +1,7 @@
+# dsh-session-resume bundle 层：插入续跑插件行。
+# 与 dsh-super-injector 同一模式：host 行由 loader 按包名解析，
+# client 注入面由 package.json 的 dsh.client 声明提供。
+- insert:
+    - id: dsh-session-resume
+      name: '@dsh-external/dsh-session-resume'
+      config: {}
