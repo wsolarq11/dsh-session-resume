@@ -2,7 +2,7 @@
  * @dsh-external/dsh-session-resume — host half.
  *
  * Two surfaces:
- * 1. `/session-resume/api` JSON routes used by the client header/dock UI.
+ * 1. A typert Remote service (ctx.remote.sessionResume.*) exposed to the client.
  * 2. `agent/pre-step` rewrite: a direct user message containing a session-log
  *    download URL (`/api/session.export?sessionId=...`) is rewritten into the
  *    canonical `@[label](dsh-session:...)` mention. The official
@@ -13,13 +13,28 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { MAX_REFERENCES, RESUME_INSTRUCTION } from './shared/constants.js'
 import { findSessionSourceRefs } from './shared/source-ref.js'
-import { registerResumeApi } from './host/api.js'
 import { resolveSession, type SessionInfo } from './host/session-log.js'
 import type { HostContext } from './host/types.js'
+import { TYPERT } from '@dsh-external/dsh-session-resume/typert'
+
+/** Typed projection of the generated host typert contribution (typed .d.ts is `unknown`). */
+const HOST_TYPERT_CONTRIBUTION = TYPERT as {
+  package: string
+  face: string
+  schemas?: unknown[]
+  invocations: Array<{ namespace: string; method: string }>
+}
+
+import { SessionResumeService } from './host/session-resume-service.js'
+export { SessionResumeService, SESSION_RESUME_SERVICE_KEY } from './host/session-resume-service.js'
+export type { RemoteResolveResult } from './host/session-resume-service.js'
 
 declare module '@deepseek-ai/cordis' {
+  interface Context {
+    sessionResume: import('./host/session-resume-service.js').SessionResumeService
+  }
   interface Events {
-    'agent/pre-step'(payload: unknown, next: () => Promise<unknown>): Promise<unknown>
+    'agent/pre-step'(event: unknown, next: () => Promise<unknown>): Promise<unknown>
   }
 }
 
@@ -31,6 +46,7 @@ export const inject = [
   'sessions',
   'workspaceRegistry',
   'attachments',
+  'typert',
 ]
 export { MAX_REFERENCES, RESUME_INSTRUCTION }
 
@@ -111,11 +127,83 @@ async function rewriteMessage(
   return changed ? { ...message, content } : message
 }
 
+/**
+ * Endpoints this contribution exports, e.g. `sessionResume/resolvePlan`.
+ */
+function typertEndpoints(): string[] {
+  return HOST_TYPERT_CONTRIBUTION.invocations.map((inv) => `${inv.namespace}/${inv.method}`)
+}
+
+/**
+ * Install a persistent guardian that keeps `sessionResume/*` registered in the
+ * host typert registry. A registered contribution is committed to `entries`
+ * and remembered in `history` (`hasSeen`). When the registering fiber is
+ * disposed (a reload/re-inject), `withdraw` removes the entries but leaves
+ * `history`, so the gateway sees `hasSeen=true` + `get()=undefined` and refuses
+ * with "withdrawn and SRC fallback is forbidden". This re-registers exactly
+ * then — reactively on `local` change events plus a low-frequency poll — so a
+ * reload never leaves the namespace permanently withdrawn.
+ */
+function installTypertSelfHeal(ctx: AppContext): void {
+  const typert = ctx.typert
+  if (!typert || HOST_TYPERT_CONTRIBUTION.invocations.length === 0) return
+  const endpoints = new Set(typertEndpoints())
+
+  /** Re-register only if the contribution is actually withdrawn (idempotent). */
+  function healOnce(): void {
+    try {
+      const withdrawn = [...endpoints].some(
+        (ep) => typert.local.hasSeen(ep) && typert.local.get(ep) === undefined,
+      )
+      if (!withdrawn) return
+      typert.register(HOST_TYPERT_CONTRIBUTION)
+      ctx.logger?.info?.('[session-resume] self-healed withdrawn typert registration')
+    } catch (healError) {
+      ctx.logger?.warn?.(JSON.stringify({ event: 'session-resume.typert-self-heal-error', error: String(healError) }))
+    }
+  }
+
+  ctx.effect(() => {
+    // React to registry changes: whenever a tracked endpoint is withdrawn,
+    // re-register (guarded by idempotent healOnce).
+    const unsubscribe =
+      typeof typert.local.subscribe === 'function'
+        ? typert.local.subscribe((change) => {
+            if (change?.key !== undefined && endpoints.has(change.key)) healOnce()
+          })
+        : undefined
+    // Belt-and-suspenders: the reload withdraw can dispatch asynchronously
+    // after the subscribe event; a low-frequency poll guarantees recovery.
+    const poll = globalThis.setInterval(healOnce, 3000)
+    // Initial heal after the framework registration settles.
+    const timer = globalThis.setTimeout(healOnce, 300)
+    return () => {
+      unsubscribe?.()
+      globalThis.clearInterval(poll)
+      globalThis.clearTimeout(timer)
+    }
+  }, 'session-resume: typt self-heal')
+}
+
 export function apply(ctx: AppContext): void {
+  // Register the typert Remote service: instantiating it binds ctx.sessionResume
+  // (via Service#constructor) so the typert gateway routes sessionResume.* to it.
   ctx.effect(
-    () => registerResumeApi(ctx),
-    'session-resume: api',
+    () => {
+      new SessionResumeService(ctx)
+      return () => undefined
+    },
+    'session-resume: remote service',
   )
+
+  // Persistent, event-driven self-heal for a withdrawn typt contribution.
+  // A reload/re-inject that disposed the registering fiber leaves
+  // `hasSeen(endpoint)=true` but `get(endpoint)=undefined`; the gateway then
+  // refuses with "withdrawn and SRC fallback is forbidden" until someone
+  // re-registers. The guardian re-registers in that exact state — reactively
+  // on `local` change events plus a low-frequency poll as a belt-and-suspenders
+  // fallback (a reload's withdraw can be dispatched asynchronously).
+  installTypertSelfHeal(ctx)
 
   ctx.effect(
     () =>

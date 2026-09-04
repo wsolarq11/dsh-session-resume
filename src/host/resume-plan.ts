@@ -38,6 +38,7 @@ async function toSourceInfo(log: SessionLogPathInfo): Promise<ResumeSourceInfo> 
     mention: formatMention(log.sessionId, log.label),
     snapshotId: log.snapshotId,
     workspaceState: await hasWorkspaceState(log.path),
+    legacySurface: log.legacySurface,
   }
 }
 

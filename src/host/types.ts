@@ -113,6 +113,16 @@ export interface HostContext {
   sessions?: SessionStoreLike
   workspaceRegistry?: WorkspaceRegistryLike
   attachments?: AttachmentStoreLike
+  /** Host typert registry (strict local store + register). Used to self-heal a withdrawn contribution. */
+  typert?: {
+    local: {
+      hasSeen(endpoint: string): boolean
+      get(endpoint: string): unknown
+      list(): unknown[]
+      subscribe?(listener: (change: { kind?: string; key: string }) => void): () => void
+    }
+    register: (contribution: { package?: string; face?: string; invocations: unknown[]; schemas?: unknown[] }) => () => void
+  }
   /**
    * Internal runtime may wrap HostContext in a getter-only facade. Read
    * through a local variable so injected contexts do not throw "without inject".

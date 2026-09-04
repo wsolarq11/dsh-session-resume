@@ -9,8 +9,22 @@ export interface BatchSourceLike {
   snapshotId?: string
   /** Canonical mention; when present it takes precedence over `path`. */
   mention?: string
+  /** Legacy sources must use the path reference, not the mention. */
+  legacySurface?: boolean
+  /** The session-log artifact file inside the snapshot; preferred for legacy routing. */
+  rootPath?: string
   /** Whether the snapshot packaged a workspace-state/ directory. */
   workspaceState?: boolean
+}
+
+/**
+ * The reference text for one source: the mention for healthy sources, the
+ * session-log artifact path for legacy ones (so the new session recognizes a
+ * `session.jsonl` file, never an engine `dsh-session:` mention that would
+ * re-trigger the fragile surface read).
+ */
+function sourceReference(source: BatchSourceLike): string {
+  return source.legacySurface === true ? source.rootPath ?? source.path : source.mention ?? source.path
 }
 
 export function buildResumeBatchText(
@@ -20,7 +34,7 @@ export function buildResumeBatchText(
   const lines = sources.map((source, index) => {
     const label = source.label ? `【${source.label}】` : ''
     const snapshot = source.snapshotId ? `（快照 ${source.snapshotId}）` : ''
-    const reference = source.mention ?? source.path
+    const reference = sourceReference(source)
     return `${index + 1}. ${label}${reference}${snapshot}`
   })
   const hasState = sources.some((source) => source.workspaceState === true)

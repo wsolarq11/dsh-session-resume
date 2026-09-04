@@ -248,3 +248,34 @@ test('compensates a newly created workspace when source attachment fails', async
   assert.deepEqual(removed, ['ws_new'])
   await cleanCache(ctx, 'sess_1')
 })
+
+test('marks a source with legacy message events as legacySurface on the plan', async () => {
+  const legacyContent =
+    '{"type":"user/message","seq":105993,"data":{"role":"user","source":{"kind":"plugin","plugin":"tool-goal","form":"notice"},"content":[{"type":"text","text":"<goal_complete>"}]}}\n'
+  const persistence = {
+    supportsRawArtifacts: true,
+    async readRaw() {
+      return { meta: { id: 'sess_1' }, filename: 'session.jsonl', content: legacyContent }
+    },
+  }
+  const ctx = ctxFor({
+    records: [
+      {
+        header: { id: 'sess_1', cwd: 'D:/AI/project', title: '任务 A' },
+        live: false,
+        persisted: true,
+      },
+    ],
+    persistence,
+    workspaceRegistry: {
+      list() {
+        return [{ id: 'ws_1', path: 'D:/AI/project', sessionIds: ['sess_1'] }]
+      },
+    },
+  })
+
+  const plan = await resolveResumePlan(ctx, 'sess_1', 'attempt_1')
+  assert.equal(plan.ok, true)
+  assert.equal(plan.sources[0].legacySurface, true)
+  await cleanCache(ctx, 'sess_1')
+})

@@ -64,27 +64,17 @@ export async function connectResumeSession(
 }
 
 /**
- * Resolve the effective resume instruction: a configured custom instruction
- * wins, otherwise the frozen default. Reads the Host-side global config via
- * the loopback API.
+ * Resolve the effective resume instruction: an explicit instruction wins,
+ * otherwise the frozen default. The self-built loopback `/config` endpoint was
+ * removed with the typert migration; the Host config is now read through the
+ * typert remote (`sessionResume.getConfig`) when a caller supplies it, and the
+ * frozen default covers the client-side fallback.
  */
 export async function resolveEffectiveInstruction(
-  fetchImpl: typeof fetch = fetch,
+  customInstruction?: string,
 ): Promise<string> {
-  try {
-    const response = await fetchImpl('/session-resume/api/config', {
-      headers: { accept: 'application/json' },
-    })
-    if (!response.ok) return RESUME_INSTRUCTION
-    const data = (await response.json()) as {
-      config?: { resumeInstruction?: unknown }
-    }
-    const custom = data.config?.resumeInstruction
-    if (typeof custom === 'string' && custom.trim()) return custom.trim()
-    return RESUME_INSTRUCTION
-  } catch {
-    return RESUME_INSTRUCTION
-  }
+  const value = customInstruction
+  return typeof value === 'string' && value.trim() ? value.trim() : RESUME_INSTRUCTION
 }
 
 /**

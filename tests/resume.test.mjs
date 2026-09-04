@@ -5,6 +5,7 @@ import {
   RESUME_INSTRUCTION,
 } from '../lib/shared/resume-text.js'
 import { connectResumeSession, promptResumeSession } from '../lib/client/resume-client.js'
+import { buildSingleResumeText } from '../lib/client/resume-executor.js'
 
 class FakeResumeSessions {
   constructor({ promptResult = { ok: true } } = {}) {
@@ -55,6 +56,46 @@ test('builds a mention prompt from a canonical mention', () => {
     buildResumePrompt('@[旧会话](dsh-session:abc)'),
     `@[旧会话](dsh-session:abc) ${RESUME_INSTRUCTION}`,
   )
+})
+
+test('buildSingleResumeText prefers the mention for a healthy source', async () => {
+  const text = await buildSingleResumeText({
+    ok: true,
+    attemptId: 'a',
+    sources: [
+      {
+        sessionId: 'sess_1',
+        label: '任务 A',
+        path: 'D:/snap',
+        kind: 'jsonl-directory',
+        mention: '@[任务 A](dsh-session:sess_1)',
+      },
+    ],
+    target: { workspaceId: 'ws_1' },
+  })
+  assert.match(text, /@\[任务 A\]\(dsh-session:sess_1\)/)
+})
+
+test('buildSingleResumeText routes a legacy source through the snapshot path, never the mention', async () => {
+  const text = await buildSingleResumeText({
+    ok: true,
+    attemptId: 'a',
+    sources: [
+      {
+        sessionId: 'sess_legacy',
+        label: '旧会话',
+        path: 'D:/snap',
+        rootPath: 'D:/snap/session.jsonl',
+        kind: 'jsonl-directory',
+        mention: '@[旧会话](dsh-session:sess_legacy)',
+        legacySurface: true,
+      },
+    ],
+    target: { workspaceId: 'ws_1' },
+  })
+  // The fragile mention must not leak into the legacy resume prompt.
+  assert.doesNotMatch(text, /dsh-session:sess_legacy/)
+  assert.match(text, /D:\/snap\/session\.jsonl/)
 })
 
 test('creates, opens and prompts a new session via the shared connect+prompt flow', async () => {

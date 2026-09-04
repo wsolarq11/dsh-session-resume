@@ -25,8 +25,16 @@ export function readService<T>(
   ctx: HostContext,
   name: keyof HostContext,
 ): T | null {
-  const direct = ctx[name]
-  if (direct) return direct as T
+  // The runtime may wrap HostContext in a getter-only facade that throws on
+  // undeclared direct reads; guard the read so a degraded service resolves
+  // through the explicit `get` fallback (or null) instead of crashing.
+  let direct: unknown
+  try {
+    direct = ctx[name]
+  } catch {
+    direct = undefined
+  }
+  if (direct && typeof direct === 'object') return direct as T
   const injected = ctx.get?.(name as string)
   return injected && typeof injected === 'object' ? (injected as T) : null
 }

@@ -39,6 +39,14 @@ export interface ResumeSourceInfo {
   mention?: string
   /** Whether the snapshot packaged a workspace-state/ directory. */
   workspaceState?: boolean
+  /**
+   * Whether the source log carries engine-upgradable legacy message events
+   * (missing message identity). Such a source must be resumed through the
+   * snapshot path reference instead of an engine `dsh-session:` mention, which
+   * would re-trigger the fragile surface-read validation and fail with
+   * "lacks an identified message".
+   */
+  legacySurface?: boolean
 }
 
 /** The target workspace a resume must create/reuse a session in. */

@@ -14,8 +14,8 @@ import { buildResumeBatchText } from '../shared/batch-text.js'
 import type { ResumePlanOk } from '../shared/plan.js'
 import type { ResumeSessionsClient } from './resume-client.js'
 import type { ClientContext } from './types.js'
+import type { TypertRemoteNamespaceMap } from '@deepseek-ai/dsh-typert-protocol'
 
-const API = '/session-resume/api'
 const ORDER_RETRY_LIMIT = 3
 const ORDER_RETRY_BASE_MS = 500
 
@@ -138,25 +138,46 @@ async function promptResumeSessionWithRetry(
   )
 }
 
-async function fetchJson<T>(url: string, init: RequestInit): Promise<T> {
-  const response = await fetch(url, init)
-  const data = (await response.json()) as T & { ok?: boolean; error?: unknown }
-  if (!data || data.ok !== true) throw new Error(typeof data.error === 'string' ? data.error : '请求失败')
-  return data
+function unwrapRemote<T>(result: { ok: true; value: T } | { ok: false; error: { message: string } }): T {
+  if (result.ok) return result.value
+  throw new Error(result.error.message)
+}
+
+/**
+ * Resolve the mounted sessionResume remote facade.
+ *
+ * The host @Remote namespace is installed as a cordis runtime service keyed
+ * `remote.sessionResume`. Reading the bare `remote.sessionResume` property can
+ * trip the "without inject" guard, so this resolves through the runtime service
+ * store first and falls back to the direct property read.
+ */
+export function remoteFacade(ctx: ClientContext): TypertRemoteNamespaceMap['sessionResume'] | undefined {
+  const get = (ctx as unknown as { get?: (key: string) => unknown }).get
+  if (get) {
+    try {
+      const viaService = get('remote.sessionResume')
+      if (viaService) return viaService as TypertRemoteNamespaceMap['sessionResume']
+    } catch {
+      // fall through to the property read
+    }
+  }
+  const remote = ctx.remote
+  if (!remote) return undefined
+  return remote.sessionResume
 }
 
 async function reportResumeComplete(
+  ctx: ClientContext,
   attemptId: string,
   targetSessionId: string | undefined,
   status: 'accepted' | 'failed',
   error?: string,
 ): Promise<void> {
-  await fetchJson(API + '/complete', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ attemptId, targetSessionId, status, error }),
-  })
+  const federate = remoteFacade(ctx)
+  if (!federate) throw new Error('续跑远程服务不可用（remote 未挂载）')
+  await unwrapRemote(await federate.completeResume(attemptId, status, targetSessionId ?? '', error ?? ''))
 }
+
 
 /**
  * Confirm the terminal state with the Host, retrying the SAME attemptId a
@@ -164,6 +185,7 @@ async function reportResumeComplete(
  * never return success while the Host may still hold the attempt as `planned`.
  */
 async function reportResumeCompleteWithRetry(
+  ctx: ClientContext,
   attemptId: string,
   targetSessionId: string | undefined,
   status: 'accepted' | 'failed',
@@ -172,7 +194,7 @@ async function reportResumeCompleteWithRetry(
   const outcome = await retryWithBackoff(
     async () => {
       try {
-        await reportResumeComplete(attemptId, targetSessionId, status, error)
+        await reportResumeComplete(ctx, attemptId, targetSessionId, status, error)
         return { done: true } as const
       } catch (reportError) {
         return { done: false, reportError } as const
@@ -188,13 +210,14 @@ async function reportResumeCompleteWithRetry(
 
 /** Best-effort failed report: a secondary notification must not mask the real error. */
 async function reportResumeCompleteBestEffort(
+  ctx: ClientContext,
   attemptId: string,
   targetSessionId: string | undefined,
   status: 'accepted' | 'failed',
   error: string | undefined,
 ): Promise<void> {
   try {
-    await reportResumeComplete(attemptId, targetSessionId, status, error)
+    await reportResumeComplete(ctx, attemptId, targetSessionId, status, error)
   } catch (reportError) {
     console.error(
       '[session-resume] complete report failed',
@@ -221,11 +244,25 @@ export async function runResumeOnce(
   let newId: string | undefined
   try {
     execution.onStage?.('resolving')
-    const plan = await fetchJson<ResumePlanOk>(API + execution.endpoint, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ...execution.body, attemptId }),
-    })
+    let plan: ResumePlanOk | undefined
+    const remote = remoteFacade(ctx)
+    if (!remote) throw new Error('续跑远程服务不可用（remote 未挂载）')
+    const body = execution.body as {
+      sessionId?: string; snapshotId?: string; snapshotIds?: Record<string, string>; sessionIds?: string[]
+    }
+    if (execution.endpoint === '/resume-batch') {
+      const batchResolved = unwrapRemote(
+        await remote.resolveBatchPlan(body.sessionIds ?? [], attemptId, body.snapshotIds ?? {}),
+      )
+      if (!batchResolved.ok) throw new Error(batchResolved.error)
+      plan = batchResolved
+    } else {
+      const singleResolved = unwrapRemote(
+        await remote.resolvePlan(body.sessionId ?? '', attemptId, body.snapshotId ?? ''),
+      )
+      if (!singleResolved.ok) throw new Error(singleResolved.error)
+      plan = singleResolved
+    }
     const text = await execution.buildText(plan)
     execution.onStage?.('creating')
     newId = await connectResumeSession(ctx.sessions, plan.target, ctx.workspaces)
@@ -240,10 +277,11 @@ export async function runResumeOnce(
           : `新会话已创建，但${execution.eventLabel}发送失败，且剪贴板复制失败: ${sendError}`,
       )
     }
-    await reportResumeCompleteWithRetry(attemptId, newId, 'accepted', undefined)
+    await reportResumeCompleteWithRetry(ctx, attemptId, newId, 'accepted', undefined)
     return { plan, newId }
   } catch (stepError) {
     await reportResumeCompleteBestEffort(
+      ctx,
       attemptId,
       newId,
       'failed',
@@ -262,7 +300,13 @@ export async function runResumeOnce(
 export function buildSingleResumeText(plan: ResumePlanOk): Promise<string> {
   const source = plan.sources[0]
   if (!source) return resolveResumeInstruction()
-  return buildResumePromptWithInstruction(source.mention ?? source.path, {
+  // A legacy source (missing message identity) must resume through the snapshot
+  // path, not the engine `dsh-session:` mention: the mention re-triggers the
+  // fragile surface read that rejects legacy events with "lacks an identified
+  // message". Path routing is the durable, reinstall-proof root fix.
+  const reference =
+    source.legacySurface === true ? source.rootPath ?? source.path : source.mention ?? source.path
+  return buildResumePromptWithInstruction(reference, {
     workspaceState: source.workspaceState === true,
   })
 }

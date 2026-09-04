@@ -11,10 +11,28 @@
 import { AutoResumeButtonFor } from './button.js'
 import { ResumeDockFor } from './dock.js'
 import type { ClientContext } from './types.js'
+import TYPERT_REMOTE from '@dsh-external/dsh-session-resume/remote'
 
-export const inject = ['slots', 'sessions', 'workspaces']
+export const inject = ['slots', 'sessions', 'workspaces', 'remote']
 
 export function apply(ctx: ClientContext): void {
+  // Mount the Host-generated typert Remote namespace so ctx.remote.sessionResume
+  // is callable from the UI. Guarded: a failed mount degrades to an explicit,
+  // surfaces-only "remote 未挂载" error instead of a silent broken click.
+  const remote = ctx.remote
+  if (remote) {
+    ctx.effect(
+      () =>
+        remote.$mount(TYPERT_REMOTE).catch((mountError: unknown) => {
+          console.error(
+            '[session-resume] remote mount failed',
+            mountError instanceof Error ? mountError.message : String(mountError),
+          )
+        }),
+      'session-resume: remote mount',
+    )
+  }
+
   ctx.effect(
     () =>
       ctx.slots.inject('conversation.session.header.utilities', () =>

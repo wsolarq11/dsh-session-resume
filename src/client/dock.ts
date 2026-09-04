@@ -13,7 +13,7 @@ import * as React from 'react'
 import { MAX_REFERENCES } from '../shared/constants.js'
 import { countDistinctSourceRefs, findFirstSourceRef } from '../shared/source-ref.js'
 import { buildResumePromptWithInstruction } from './resume-client.js'
-import { copyText } from './resume-executor.js'
+import { copyText, remoteFacade } from './resume-executor.js'
 import type { ResumeOrderUiState } from './resume-executor.js'
 import {
   dockStyle,
@@ -30,8 +30,6 @@ import {
   type UrlDockProps,
 } from './dock-ui.js'
 import type { ClientContext, DockProps, ResolvedLogUrl } from './types.js'
-
-const API = '/session-resume/api'
 
 /** Path dock: pure presentational, no hooks. */
 function PathResumeDock({ props, draft, hit }: PathDockProps): React.ReactElement {
@@ -95,15 +93,23 @@ function UrlResumeDock({ ctx, props, draft, urlHit }: UrlDockProps): React.React
     }
     let alive = true
     setStatus('loading')
-    fetch(API + '/resolve', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text: draft }),
-    })
-      .then((response) => response.json())
-      .then((data) => {
+    const remote = remoteFacade(ctx)
+    if (!remote) {
+      setStatus('error')
+      setError('当前环境未挂载续跑远程服务')
+      return
+    }
+    remote
+      .resolveFromText(draft)
+      .then((res) => {
         if (!alive) return
-        const record = data as {
+        if (!res.ok) {
+          setStatus('error')
+          setError(res.error?.message ?? '无法解析该会话日志链接')
+          setInfo(null)
+          return
+        }
+        const record = res.value as {
           ok?: boolean
           error?: string
           sessionId?: string
@@ -112,7 +118,7 @@ function UrlResumeDock({ ctx, props, draft, urlHit }: UrlDockProps): React.React
         }
         if (!record || record.ok !== true) {
           setStatus('error')
-          setError(record.error ?? '无法解析该会话日志链接')
+          setError(record?.error ?? '无法解析该会话日志链接')
           setInfo(null)
         } else {
           setStatus('ready')

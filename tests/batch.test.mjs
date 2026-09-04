@@ -91,6 +91,30 @@ test('buildResumeBatchText appends the workspace-state pointer when any source p
   assert.match(text, /文件清单与 git 状态/)
 })
 
+test('buildResumeBatchText routes a legacy source through its path, not the mention', () => {
+  const text = buildResumeBatchText(
+    [
+      {
+        path: 'D:/legacy/session.jsonl',
+        label: '旧会话',
+        mention: '@[旧会话](dsh-session:legacy)',
+        legacySurface: true,
+      },
+      {
+        path: 'D:/ok/session.jsonl',
+        label: '正常',
+        mention: '@[正常](dsh-session:ok)',
+      },
+    ],
+    '请继续',
+  )
+  // The legacy source must appear as a path reference (no raw mention may leak).
+  assert.match(text, /D:\/legacy\/session\.jsonl/)
+  assert.doesNotMatch(text, /dsh-session:legacy/)
+  // A healthy source keeps its mention.
+  assert.match(text, /dsh-session:ok/)
+})
+
 test('resolveResumeBatchPlan materializes multiple sources and resolves target workspace', async () => {
   const cacheRoot = join(tmpdir(), 'dsh-session-resume-batch-tests', randomUUID())
   const records = [

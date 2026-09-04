@@ -1,10 +1,12 @@
 /** Host log resolution: find the session, resolve labels/mentions, and read the raw artifact. */
 
+import { readFile } from 'node:fs/promises'
 import { materializeSessionLogExport } from './log-materialize.js'
 import { formatMention } from '../shared/session-uri.js'
 import { findSessionIdFromMention, findSessionSourceRefs } from '../shared/source-ref.js'
 import { readResumeConfig } from './config.js'
 import { listSessionSnapshots } from './snapshot-store.js'
+import { hasLegacySurfaceEvents } from '../shared/legacy-surface.js'
 import { flushLiveSession, readCacheRootSafe, readSessionPersistence, readSessionQuery } from './service.js'
 import { JSONL_DIRECTORY_KIND, type ResumeSourceInfo } from '../shared/plan.js'
 import type {
@@ -58,6 +60,11 @@ export async function resolveSourceLog(
       rootPath: match.rootPath,
       layout: match.layout,
       snapshotId: match.snapshotId,
+      // Read the snapshot's own root artifact (a byte-copy of the source raw)
+      // so snapshot resume never re-reads the live/persisted source. This
+      // keeps the "snapshot reuse does not re-materialize" contract while still
+      // routing legacy sources away from the fragile mention read.
+      legacySurface: match.rootPath ? await scanRootForLegacy(match.rootPath) : false,
     }
   }
   return resolveSessionLogPath(ctx, sessionId)
@@ -182,10 +189,27 @@ export async function resolveSessionLogPath(
       rootPath: materialized.rootPath,
       layout: materialized.layout,
       snapshotId: materialized.snapshotId,
+      legacySurface: hasLegacySurfaceEvents(raw.content),
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     return { ok: false, status: 501, error: `无法物化会话日志目录: ${message}` }
+  }
+}
+
+/**
+ * Best-effort legacy-surface assessment of a snapshot's root artifact. Reading
+ * the materialized file (never the live source) keeps snapshot resume from
+ * re-touching the source, and a missing/unreadable snapshot root degrades to
+ * `false` (treat as a normal source) rather than failing snapshot resolution —
+ * the flag only changes which reference is emitted, never hard-fails a resume.
+ */
+async function scanRootForLegacy(rootPath: string): Promise<boolean> {
+  try {
+    const content = await readFile(rootPath, 'utf8')
+    return hasLegacySurfaceEvents(content)
+  } catch {
+    return false
   }
 }
 

@@ -42,23 +42,16 @@ function planResponse() {
   }
 }
 
-async function fakeFetch(url, init = {}) {
-  if (String(url).endsWith('/resume')) {
-    return new Response(JSON.stringify(planResponse()), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    })
+/** Build a ClientContext whose remote facade serves the resume sessionResume namespace. */
+function remoteCtx(sessions, remote = {}) {
+  const sessionResume = {
+    resolvePlan: async () => ({ ok: true, value: planResponse() }),
+    resolveBatchPlan: async () => ({ ok: true, value: planResponse() }),
+    completeResume: async () => ({ ok: true, value: { ok: true } }),
+    ...remote,
   }
-  if (String(url).endsWith('/complete')) {
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    })
-  }
-  return new Response(JSON.stringify({ ok: false, error: 'unexpected' }), { status: 500 })
+  return { sessions, workspaces: undefined, remote: { sessionResume } }
 }
-
-globalThis.fetch = fakeFetch
 
 function execution() {
   return {
@@ -72,7 +65,7 @@ function execution() {
 
 test('resolves, connects, and prompts exactly once on success', async () => {
   const sessions = new FakeResumeSessions()
-  const result = await runResumeOnce({ sessions, workspaces: undefined }, execution())
+  const result = await runResumeOnce(remoteCtx(sessions), execution())
   assert.equal(result.newId, 'new_session_1')
   assert.equal(sessions.createdCalls.length, 1)
   assert.equal(sessions.promptCalls.length, 1)
@@ -82,7 +75,7 @@ test('resolves, connects, and prompts exactly once on success', async () => {
 test('does not create a second session when the prompt keeps failing', async () => {
   const sessions = new FakeResumeSessions({ promptAccepted: false })
   await assert.rejects(
-    runResumeOnce({ sessions, workspaces: undefined }, execution()),
+    runResumeOnce(remoteCtx(sessions), execution()),
     /发送失败/,
   )
   assert.equal(sessions.createdCalls.length, 1)
@@ -90,26 +83,21 @@ test('does not create a second session when the prompt keeps failing', async () 
   assert.equal(sessions.promptCalls.length, 3)
 })
 
-test('retries the accepted /complete report with the same attemptId and only resolves after confirmation', async () => {
+test('retries the accepted completeResume report with the same attemptId and only resolves after confirmation', async () => {
   const completeCalls = []
-  const failNext = { remaining: 2 }
-  globalThis.fetch = async (url, init = {}) => {
-    const body = JSON.parse(init.body ?? '{}')
-    if (String(url).endsWith('/resume')) {
-      return okResponse(planResponse())
-    }
-    if (String(url).endsWith('/complete')) {
-      completeCalls.push(body.attemptId)
-      if (failNext.remaining > 0) {
-        failNext.remaining -= 1
-        return new Response(JSON.stringify({ ok: false, error: 'flare down' }), { status: 503 })
-      }
-      return okResponse({ attemptId: body.attemptId, ok: true, status: 'accepted' })
-    }
-    return new Response(JSON.stringify({ ok: false, error: 'unexpected' }), { status: 500 })
-  }
+  let remaining = 2
   const sessions = new FakeResumeSessions()
-  const result = await runResumeOnce({ sessions, workspaces: undefined }, execution())
+  const ctx = remoteCtx(sessions, {
+    completeResume: async (attemptId) => {
+      completeCalls.push(attemptId)
+      if (remaining > 0) {
+        remaining -= 1
+        return { ok: false, error: { message: 'flare down' } }
+      }
+      return { ok: true, value: { ok: true } }
+    },
+  })
+  const result = await runResumeOnce(ctx, execution())
   assert.equal(completeCalls.length, 3)
   // All three retries reuse the same attemptId (no duplicate orders/sessions).
   assert.equal(new Set(completeCalls).size, 1)
@@ -119,20 +107,15 @@ test('retries the accepted /complete report with the same attemptId and only res
 
 test('rejects instead of reporting success when the Host never confirms the accepted report', async () => {
   const completeCalls = []
-  globalThis.fetch = async (url, init = {}) => {
-    const body = JSON.parse(String(init.body ?? ''))
-    if (String(url).endsWith('/resume')) {
-      return okResponse(planResponse())
-    }
-    if (String(url).endsWith('/complete')) {
-      completeCalls.push(body.attemptId)
-      return new Response(JSON.stringify({ ok: false, error: 'unavailable' }), { status: 503 })
-    }
-    return new Response(JSON.stringify({ ok: false, error: 'unexpected' }), { status: 500 })
-  }
   const sessions = new FakeResumeSessions()
+  const ctx = remoteCtx(sessions, {
+    completeResume: async (attemptId) => {
+      completeCalls.push(attemptId)
+      return { ok: false, error: { message: 'unavailable' } }
+    },
+  })
   await assert.rejects(
-    runResumeOnce({ sessions, workspaces: undefined }, execution()),
+    runResumeOnce(ctx, execution()),
     /未能确认续跑完成|已重试/,
   )
   // 3 accepted-report retries + 1 failed best-effort report, all the same attemptId.
@@ -142,22 +125,17 @@ test('rejects instead of reporting success when the Host never confirms the acce
 
 test('NEW-C: runResumeOnce honors an injected scope attempt-id generator', async () => {
   const usedAttemptIds = []
-  globalThis.fetch = async (url, init = {}) => {
-    const body = JSON.parse(String(init.body ?? '{}'))
-    if (String(url).endsWith('/resume')) {
-      usedAttemptIds.push(body.attemptId)
-      return okResponse(planResponse())
-    }
-    if (String(url).endsWith('/complete')) {
-      return okResponse({ ok: true })
-    }
-    return new Response(JSON.stringify({ ok: false, error: 'unexpected' }), { status: 500 })
-  }
   const sessions = new FakeResumeSessions()
+  const ctx = remoteCtx(sessions, {
+    resolvePlan: async (_sessionId, attemptId) => {
+      usedAttemptIds.push(attemptId)
+      return { ok: true, value: planResponse() }
+    },
+  })
   const scope = createResumeExecutorScope()
   let generated = 0
   scope.attemptId = (prefix) => `${prefix}deterministic-${++generated}`
-  const result = await runResumeOnce({ sessions, workspaces: undefined }, execution(), scope)
+  const result = await runResumeOnce(ctx, execution(), scope)
   assert.equal(usedAttemptIds[0], 'resume-deterministic-1')
   assert.equal(sessions.createdCalls.length, 1)
   assert.ok(result.newId)
@@ -181,10 +159,3 @@ test('NEW-C: runResumeInFlight dedup is isolated per executor scope', async () =
   assert.equal(ra1, ra2)      // same scope shares the same promise
   assert.notEqual(ra1, rb)    // distinct scopes produce distinct promises
 })
-
-function okResponse(payload) {
-  return new Response(JSON.stringify(payload), {
-    status: 200,
-    headers: { 'content-type': 'application/json' },
-  })
-}
