@@ -33,9 +33,9 @@ Client 经 `ctx.remote.sessionResume.*` 直调，无自建 HTTP。核心能力�
 - 决策：删除自建 HTTP / 路由 / 限流，改为平台级 tyert 传输；`completeResume` 含 WAL + 审计。
 
 ### 2. 续跑指令（冻结并唯一事实源）
-- 续跑文本的权威定义在 `src/shared/constants.ts` 的 `RESUME_INSTRUCTION`；由 `tests/resume.test.mjs`
+- 续跑文本的权威定义在 `src/pure/text/constants.ts` 的 `RESUME_INSTRUCTION`；由 `tests/resume.test.mjs`
   冻结断言，措辞改动必须先改测试。
-- 不变量：任何流程的续跑提示都经 `buildResumePrompt`（`shared/resume-text.ts`）拼前缀，且不复制措辞。
+- 不变量：任何流程的续跑提示都经 `buildResumePrompt`（`src/pure/text/resume-text.ts`）拼前缀，且不复制措辞。
 
 ### 3. 快照、版本化与保留
 - 物化目录分层 `snapshots/<snapshotId>/`；快照 id 用存储序数（不依赖时钟）。

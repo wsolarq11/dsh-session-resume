@@ -1,10 +1,11 @@
 /**
- * Client-only resume wiring: reading the effective instruction over the
- * loopback API and creating/reconnecting + prompting the target session.
+ * Client-side resume wiring: resolving the effective resume instruction, then
+ * creating/reconnecting and prompting the target session.
  *
- * Client-only: uses the browser `fetch` and the injected session/workspace
- * clients. Never import this module from the Host bundle. The pure text
- * builders it depends on live in `../shared/resume-text.js`.
+ * Client-only: uses the injected session/workspace clients and, when the Host
+ * config is requested, the typert `sessionResume.getConfig` remote. Never
+ * import this module from the Host bundle. The pure text builders it depends
+ * on live in `../../pure/text/resume-text.js`.
  */
 
 import { RESUME_INSTRUCTION, buildResumePrompt, type ResumePromptOptions } from '../../pure/text/resume-text.js'

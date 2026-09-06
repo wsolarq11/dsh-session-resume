@@ -4,3 +4,6 @@ lib/
 dist/
 *.tsbuildinfo
 *.tgz
+
+# 局部验证产物（headless 截图与 playwright 运行时，非源码交付）
+.verify/

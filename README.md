@@ -74,9 +74,13 @@ remote（Host `SessionResumeService`，客户端 `ctx.remote.sessionResume.*`）
 ```text
 src/
   index.ts  插件入口（SessionResumeService + typert 自愈 + agent/pre-step 改写）
-  host/     Host 半区：物化 / 工作区 / 计划 / 订单 + WAL / 快照 / 审计
-  client/   Client 半区：按钮 / 输入 dock / 统一执行器（remote 直调）
-  shared/   Host/Client 共用纯逻辑（无 React）
+  pure/     Host/Client 共用纯逻辑：refs（路径/URL/mention 识别）、text（续跑文本）、
+            plan（wire 契约）、order（订单幂等/序数与 WAL 记账）
+  io/fs/    副作用边界：缓存根 / 快照存储 / 会话日志物化 / 配置 / 工作区
+  orchestration/  编排/协议面：host（SessionResumeService + plan + audit）
+            + client（按钮 / 输入 dock / 统一执行器，remote 直调）
+  contract/ 契约 seam 的结构类型面
+  typert-meta.d.ts  typert 协议面（generator 输入，固定点）
 tests/      无依赖 Node 测试
 scripts/    build.sh / e2e-final.mjs / e2e-user-click.mjs
 lib/        npm run build 生成（不入库）

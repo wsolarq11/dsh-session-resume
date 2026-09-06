@@ -3,9 +3,9 @@
  *
  * The official DSH web profile does not expose a stable per-plugin config
  * registry to external plugins, so this plugin keeps one small JSON file on
- * the Host: `%TEMP%\dsh-session-resume\config.json`. The Host serves it over
- * the existing loopback-only, rate-limited HTTP surface; the client reads it
- * before building a resume prompt.
+ * the Host: `%TEMP%\dsh-session-resume\config.json`. The Host exposes it over
+ * the typert remote (`sessionResume.getConfig` / `setConfig`); the client reads
+ * it before building a resume prompt.
  *
  * Values are validated fail-closed: unknown keys are dropped, wrong types are
  * replaced by defaults, and normalization always returns the full effective

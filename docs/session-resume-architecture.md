@@ -88,15 +88,15 @@ Host 暴露一个 `sessionResume` 命名空间（`@Remote` 方法），Client �
 
 | 轴区 | 目录 | 说明 |
 | --- | --- | --- |
-| Host 半区 | `src/host/` + `src/index.ts` | 服务进程内；持资源、碰文件/官方 API、写 WAL 与审计 |
-| Client 半区 | `src/client/` | 浏览器 GUI；UI、交互、统一执行器 |
-| 共享层 | `src/shared/` | 两端共用纯逻辑（URL/URI/路径/批次/续跑文本） |
+| Host 半区 | `src/orchestration/host/` + `src/io/fs/` + `src/contract/` + `src/index.ts` | 服务进程内；持资源、碰文件/官方 API、写 WAL 与审计 |
+| Client 半区 | `src/orchestration/client/` | 浏览器 GUI；UI、交互、统一执行器 |
+| 共享层 | `src/pure/` | 两端共用纯逻辑（URL/URI/路径/批次/续跑文本、订单幂等、wire 契约） |
 
 **横向交叉（代码性质，非目录）**——附着在每个模块上的"变更性格"，不按它建目录，只按它给被改时的风险标号：
 
-- **纯核（确定性）**：不改外部就确定、可复测。例：`src/shared/*`、`src/host/resume-order.ts` 的幂等/序数、`src/host/workspace-state.ts`、`src/host/order-wal.ts` 的记账规则、`src/shared/source-ref.ts` 引用扫描。生产也是"变动成本低 + 测试回报高"的同一片。
-- **副作用/边界**：触碰文件、官方 SDK、外部 IO，最容易随依赖漂移。`src/host/snapshot-store.ts`/`cache-root.ts`（目录）、`src/host/session-log.ts`（readRaw 物化）、`src/host/config.ts`（%TEMP% 原子写）、`src/host/service.ts`（读注入服务）。改它们要把"薄壳隔离"放第一位。
-- **编排/协议**：把纯核接到副作用与契约的组装层——`src/host/session-resume-service.ts`（Host 门面 9 端点）、`src/client/resume-executor.ts`（统一执行器）、`src/client/resume-client.ts`（会话创建/复用）。只做组装，不塞业务逻辑。
+- **纯核（确定性）**：不改外部就确定、可复测。例：`src/pure/*`、`src/pure/order/resume-order.ts` 的幂等/序数、`src/io/fs/workspace-state.ts`、`src/pure/order/order-wal.ts` 的记账规则、`src/pure/refs/source-ref.ts` 引用扫描。生产也是"变动成本低 + 测试回报高"的同一片。
+- **副作用/边界**：触碰文件、官方 SDK、外部 IO，最容易随依赖漂移。`src/io/fs/snapshot-store.ts`/`cache-root.ts`（目录）、`src/io/fs/session-log.ts`（readRaw 物化）、`src/io/fs/config.ts`（%TEMP% 原子写）、`src/orchestration/host/service.ts`（读注入服务）。改它们要把"薄壳隔离"放第一位。
+- **编排/协议**：把纯核接到副作用与契约的组装层——`src/orchestration/host/session-resume-service.ts`（Host 门面 9 端点）、`src/orchestration/client/resume-executor.ts`（统一执行器）、`src/orchestration/client/resume-client.ts`（会话创建/复用）。只做组装，不塞业务逻辑。
 
 **契约 seam（唯一"改一处必须两端同步改"面）**：typert remote（`ctx.remote.sessionResume.*`，见 §5）。这是全仓唯一"两端对称"的接缝——增/改/删一个端点，Host 门面与 Client 调用必须一起动。**它是进化效率最该盯紧的单点**：任何横穿契约的性质变更，先在 seam 上对齐，再落两半区。
 
@@ -112,7 +112,7 @@ Host 暴露一个 `sessionResume` 命名空间（`@Remote` 方法），Client �
    确保后续 `readRaw` 返回完整快照。flush 只是日志落盘，不保留 job、终端或凭据等运行状态。
 5. Host 调用 `sessionPersistence.readRaw(sessionId)` 读取官方原始 artifact，并物化成
    官方导出同构目录：根文件名取 `raw.filename`、子代理 `subagents/<safeId>/`、图片 `media/`。
-6. Host 通过 `resolveResumeWorkspace(ctx, sourceSessionId, cwd)`（`src/host/workspace.ts`）解析原工作区：
+6. Host 通过 `resolveResumeWorkspace(ctx, sourceSessionId, cwd)`（`src/io/fs/workspace.ts`）解析原工作区：
    先按 `workspaceRegistry.list()` 中 `sessionIds` 归属，再按 `resolveByPath(cwd)`，仍未命中且
    允许创建时 `create(cwd)` 并把源会话归入（attach 失败时回滚新建工作区）；
    无法解析时返回 409/501，不继续创建会话。
@@ -131,17 +131,17 @@ Host 暴露一个 `sessionResume` 命名空间（`@Remote` 方法），Client �
 | 区域 | 角色 |
 | --- | --- |
 | `src/index.ts` | Host 插件入口：实例化 `SessionResumeService`、安装 typert 自愈守卫、注册 `agent/pre-step` 改写；注入 `typert` 等服务 |
-| `src/host/session-resume-service.ts` | `SessionResumeService extends TyperRemoteService`；暴露 9 个 `@Remote` 方法，委托给纯域核心 |
-| `src/host/` | 留日志读取与目录物化、工作区解析、续跑计划、订单幂等守卫、WAL、审计 |
-| `src/host/snapshot-store.ts` | 快照目录唯一所有者：缓存根、安全路径段、snapshots 目录、list/prune、layout 真实读取 |
-| `src/host/session-log.ts` | 会话记录查找、实时物化、`resolveSourceLog`（快照/实时统一 source 解析，单/批量共用） |
-| `src/client/` | 注册 Header 按钮与输入框 Dock；`resume-executor.ts` 统一执行器（单/批量共用 resolve → prompt 重试 → 上报）；`resume-client.ts` 负责会话创建/复用与指令解析 |
-| `src/shared/` | Host/Client 共用 URL、URI、JSONL 路径解析、统一引用扫描、批次文本、续跑文本构建 |
+| `src/orchestration/host/session-resume-service.ts` | `SessionResumeService extends TyperRemoteService`；暴露 9 个 `@Remote` 方法，委托给纯域核心 |
+| `src/orchestration/host/` + `src/io/fs/` | 日志读取与目录物化、工作区解析、续跑计划、订单幂等守卫、WAL、审计 |
+| `src/io/fs/snapshot-store.ts` | 快照目录唯一所有者：缓存根、安全路径段、snapshots 目录、list/prune、layout 真实读取 |
+| `src/io/fs/session-log.ts` | 会话记录查找、实时物化、`resolveSourceLog`（快照/实时统一 source 解析，单/批量共用） |
+| `src/orchestration/client/` | 注册 Header 按钮与输入框 Dock；`resume-executor.ts` 统一执行器（单/批量共用 resolve → prompt 重试 → 上报）；`resume-client.ts` 负责会话创建/复用与指令解析 |
+| `src/pure/` | Host/Client 共用 URL、URI、JSONL 路径解析、统一引用扫描、批次文本、续跑文本构建、订单幂等与 WAL 契约 |
 | `src/typert-meta.d.ts` | 单包协议面：供 generator 与 client type-face 解析 |
 
 **依赖方向（本仓真实边界，不套"四栈"）**：这是一个单 client ↔ 单 host 的插件，只有一条依赖链——
-官方 DSH 能力（`sessions`/`readRaw`/`workspaceRegistry`/`session.prompt`）→ `src/host/`（服务与资源）
-→ `src/shared/`（两端共用纯逻辑）→ `src/client/`（UI 与请求）。依赖**单向向下**；跨边界调用走 typert
+官方 DSH 能力（`sessions`/`readRaw`/`workspaceRegistry`/`session.prompt`）→ `src/orchestration/host/` + `src/io/fs/`（服务与资源）
+→ `src/pure/`（两端共用纯逻辑）→ `src/orchestration/client/`（UI 与请求）。依赖**单向向下**；跨边界调用走 typert
 remote。所谓"供需"在这里只是 host 供、client 求的**一条供需边**，不构成可称"栈"的多方流动层级。
 
 ## 5. Remote 契约（`ctx.remote.sessionResume.*`）
@@ -190,7 +190,7 @@ targetWorkspaceId / status / error`。终态由 `completeResume` 追加记录。
 
 ## 6. 新会话连接与发送
 
-`src/client/resume-client.ts` 使用官方 client 协议：
+`src/orchestration/client/resume-client.ts` 使用官方 client 协议：
 
 ```text
 if (target.workspaceId && workspaces?.connectWorkspace)
@@ -210,7 +210,7 @@ binding(newId).session.prompt([{ type:"text", text }], "queue")
 
 ## 7. 路径识别
 
-统一引用扫描（`src/shared/source-ref.ts`）支持：
+统一引用扫描（`src/pure/refs/source-ref.ts`）支持：
 
 - Windows 绝对路径 `C:\...\session.jsonl[.zstd]`
 - POSIX 绝对路径
@@ -231,7 +231,7 @@ binding(newId).session.prompt([{ type:"text", text }], "queue")
 
 ## 9. 关键集成点 / 不变量
 
-- 读取注入服务统一经 `src/host/service.ts` 的 `readService`（直接属性或 `ctx.get` 二选一），避免触碰
+- 读取注入服务统一经 `src/orchestration/host/service.ts` 的 `readService`（直接属性或 `ctx.get` 二选一），避免触碰
   运行时 Cordis Proxy 的“without inject”守卫；测试专用缓存根须先 `Reflect.has` 探测。
 - Client 侧间接 remote：`remoteFacade(ctx)` 优先 `ctx.get('remote.sessionResume')`，回退 `ctx.remote.sessionResume`，
   规避裸属性读被守卫拦截；Client 先用 `remote.$mount(TYPERT_REMOTE)` 挂载 Host 命名空间。

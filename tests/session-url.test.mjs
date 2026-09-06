@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   findLogUrlMatches,
   parseLogUrl,
+  exportPathFromId,
 } from '../lib/pure/refs/session-url.js'
 
 const urlMatch = (text) => findLogUrlMatches(text)[0] ?? null
@@ -46,4 +47,20 @@ test('finds and deduplicates multiple URLs', () => {
   const hits = findLogUrlMatches(text)
   assert.equal(hits.length, 3)
   assert.deepEqual(hits.map((hit) => hit.id), ['sess_1', 'sess_2', 'sess_1'])
+})
+test('exportPathFromId builds the canonical export path and encodes the id', () => {
+  assert.equal(
+    exportPathFromId('sess_1'),
+    '/api/session.export?sessionId=sess_1&includeDescendants=true',
+  )
+  assert.equal(
+    exportPathFromId('a/b c?'),
+    '/api/session.export?sessionId=a%2Fb%20c%3F&includeDescendants=true',
+  )
+})
+
+test('exportPathFromId round-trips through the official URL parser', () => {
+  const id = 'sess_abc_123'
+  const hit = parseLogUrl(exportPathFromId(id), 0)
+  assert.equal(hit?.id, id)
 })

@@ -58,3 +58,12 @@ export function findLogUrlMatches(text: string): LogUrlHit[] {
   }
   return hits
 }
+/**
+ * Build the official session-log export path for a known session id. This
+ * mirrors {@link session-log.exportDownloadPath} so a read-only client copy
+ * (header "复制日志地址" button) stays structurally identical to the Host's
+ * canonical export route without importing host-side I/O.
+ */
+export function exportPathFromId(sessionId: string): string {
+  return '/api/session.export?sessionId=' + encodeURIComponent(sessionId) + '&includeDescendants=true'
+}
